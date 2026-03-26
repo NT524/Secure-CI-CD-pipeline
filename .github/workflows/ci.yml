@@ -20,16 +20,16 @@ jobs:
 
       # Bước 2: Setup môi trường (Thầy để sẵn mẫu, em dùng Python hay Node thì mở comment phần đó ra nhé)
       # --- Dành cho NodeJS ---
-      # - name: 2. Setup Node.js
-      #   uses: actions/setup-node@v3
-      #   with:
-      #     node-version: '18'
-      
-      # --- Dành cho Python ---
-      - name: 2. Setup Python
-        uses: actions/setup-python@v4
+      - name: 2. Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          python-version: '3.10'
+          node-version: '18'
+      
+      # # --- Dành cho Python ---
+      # - name: 2. Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.10'
 
       # Bước 3: Build thử Docker Image
       - name: 3. Test Docker Build (No Push)
