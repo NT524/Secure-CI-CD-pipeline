@@ -21,7 +21,7 @@ jobs:
       # Bước 2: Setup môi trường (Thầy để sẵn mẫu, em dùng Python hay Node thì mở comment phần đó ra nhé)
       # --- Dành cho NodeJS ---
       - name: 2. Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
       
