@@ -36,5 +36,5 @@ jobs:
         # Mục đích tuần 1: Chỉ cần build thành công, không báo lỗi là đạt. Chưa cần đẩy lên Registry.
         run: |
           echo "Bắt đầu đóng gói ứng dụng bằng Docker..."
-          docker build -t capstone-app:test-build ./app/NodeJS/ # Thay đường dẫn nếu dùng Python
+          docker build -t capstone-app:test-build ./app/NodeJS/Nodegoat# Thay đường dẫn nếu dùng Python
           echo "Build thành công! Sẵn sàng cho các bài test bảo mật ở tuần sau!"
