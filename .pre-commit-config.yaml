@@ -1,0 +1,80 @@
+repos:
+  # 1. UNIVERSAL SECRET SCANNING (Cực kỳ nhanh, chặn ngay từ cửa)
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 'v8.30.0'
+    hooks:
+      - id: gitleaks
+        description: Ngăn chặn Dev đẩy nhầm mật khẩu, API keys lên Git.
+
+  # 2. IaS / TERRAFORM SECURITY SCAN (Dành cho mã nguồn hạ tầng)
+  - repo: https://github.com/aquasecurity/tfsec
+    rev: 'v1.28.14'
+    hooks:
+      - id: tfsec
+        args: ['--minimum-severity=MEDIUM'] # Bỏ qua các lỗi LOW để Dev không bị ngợp
+        description: Quét lỗi bảo mật trong file Terraform (AWS, GCP, Azure).
+
+  # 3. STATIC ANALYSIS (SAST) SIÊU TỐC VỚI SEMGREP
+  - repo: https://github.com/returntocorp/semgrep
+    rev: 'v1.151.0'
+    hooks:
+      - id: semgrep
+        name: semgrep
+        description: Quét lỗ hổng bảo mật trong source code (JS, Python, Go,...)
+        # Chỉ dùng bộ rule mặc định (chất lượng cao, ít báo nhầm) thay vì quét toàn bộ
+        args:
+          - --config=p/javascript
+          - --config=p/nodejs
+          - --config=p/owasp-top-ten
+          - --error # Ép pre-commit báo Failed nếu tìm thấy lỗi
+
+  # 4. LINTERS & CODE QUALITY (Kế thừa từ NodeGoat)
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: 'v10.1.0'
+    hooks:
+      - id: eslint
+        files: \.[jt]sx?$  # Chỉ quét file JS/TS
+        types: [file]
+        args: ['--max-warnings=0']
+        additional_dependencies:
+          - eslint
+          - eslint-plugin-security
+
+  # 5. DỌN DẸP CODE CƠ BẢN (Fast feedback)
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 'v6.0.0'
+    hooks:
+      - id: check-added-large-files
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: check-executables-have-shebangs
+      - id: check-json
+        exclude: ".devcontainer/devcontainer.json"
+      - id: check-merge-conflict
+      - id: check-shebang-scripts-are-executable
+      - id: check-symlinks
+        exclude: "^(bin|test|libs/testo/.*test|src/spacegrep/bin/.*)$"
+      - id: check-toml
+      - id: check-vcs-permalinks
+      - id: check-xml
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: debug-statements
+      - id: destroyed-symlinks
+      - id: detect-private-key
+      - id: end-of-file-fixer
+        # Exclude generated files.
+        # coupling: apply the same exclusions in semgrep-proprietary
+        exclude: "^\\.github/workflows/.+|semgrep\\.opam|opam-lockfiles/.+|.gitmodules|.dockerignore$"
+      - id: fix-byte-order-marker
+      - id: fix-encoding-pragma
+        args: [--remove]
+      - id: mixed-line-ending
+        args: [--fix=lf]
+        exclude: "libs/testo/tests/snapshots"
+      - id: no-commit-to-branch
+      - id: requirements-txt-fixer
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        exclude: "snapshots"
