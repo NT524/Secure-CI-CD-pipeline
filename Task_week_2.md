@@ -10,7 +10,7 @@ Nhiệm vụ của là thiết lập một "chốt chặn" ngay trên máy tính
     - Khai báo hook cho `gitleaks` vào file cấu hình này.
     - **Kiểm thử (Test plan):** Cố tình giả lập lỗi bằng cách thêm một đoạn mã hardcode (ví dụ: gán cứng API Key hoặc mật khẩu DB vào file code). Sau đó chạy `git commit` xem `gitleaks` có phát hiện và chặn lại (fail build) không.
 
-## 2. Nhiệm vụ của Bạn Trung (Thành viên B): Tích hợp SAST & SCA trên CI
+## 2. Nhiệm vụ của Bạn Trường (Thành viên B): Tích hợp SAST & SCA trên CI
 
 Bạn sẽ lo phần "chốt chặn" thứ hai trên GitHub. Khi code vượt qua được máy local và đẩy lên GitHub (Push/Pull Request), CI Pipeline sẽ quét sâu hơn vào mã nguồn và các thư viện phụ thuộc.
 
