@@ -1,0 +1,41 @@
+name: DevSecOps Baseline CI
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+# 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
+on:
+  push:
+    branches: [ "main", "dev" ] # Chạy khi có code push lên nhánh main hoặc dev
+  pull_request:
+    branches: [ "main" ]        # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
+
+# 2. CẤU HÌNH JOBS: Các công việc cần làm
+jobs:
+  build-and-test:
+    name: Build & Test Application
+    runs-on: ubuntu-latest      # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
+
+    steps:
+      # Bước 1: Lấy code từ GitHub về cái máy ảo Ubuntu kia
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Bước 2: Setup môi trường (Thầy để sẵn mẫu, em dùng Python hay Node thì mở comment phần đó ra nhé)
+      # --- Dành cho NodeJS ---
+      - name: 2. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      # # --- Dành cho Python ---
+      # - name: 2. Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.10'
+
+      # Bước 3: Build thử Docker Image
+      - name: 3. Test Docker Build (No Push)
+        # Mục đích tuần 1: Chỉ cần build thành công, không báo lỗi là đạt. Chưa cần đẩy lên Registry.
+        run: |
+          echo "Bắt đầu đóng gói ứng dụng bằng Docker..."
+          docker build -t capstone-app:test-build ./app/NodeJS/NodeGoat/
+          echo "Build thành công! Sẵn sàng cho các bài test bảo mật ở tuần sau!"
