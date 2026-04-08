@@ -43,6 +43,7 @@ jobs:
             p/security-audit
             p/nodejs
 
+
   # ---  DOCKER BUILD  ---
   build-and-test:
     name: Build & Test Application
@@ -78,9 +79,17 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft nt524:${{ github.sha }} -o spdx-json > sbom.spdx.json
+      
+      # Bước 5: THÊM MỚI BƯỚC NÀY ĐỂ LƯU FILE
+      - name: 5. Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report         # Tên của file nén hiển thị trên giao diện GitHub
+          path: sbom.spdx.json      # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
+          retention-days: 7         # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
 
-      # Bước 5: Quét Image với Trivy
-      - name: Run Trivy Vulnerability Scanner
+      # Bước 6: Quét Image với Trivy
+      - name: 6. Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'nt524:${{ github.sha }}'
