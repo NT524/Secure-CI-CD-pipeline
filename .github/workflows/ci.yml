@@ -70,20 +70,20 @@ jobs:
       # Bước 3: Build thử Docker Image
       - name: 3. Docker build image (No Push)
         #pattern: ocker build -t ghcr.io/<repo_name>:<commit-sha> thay repo_name thành tên mong muốn
-        run: docker build -t NT524:${{ github.sha }} .
+        run: docker build -t nt524:${{ github.sha }} .
       
       # Bước 4: Tạo SBOM với Syft
       - name: 4. Generate SBOM with Syft
         #install syft and using Syft to generate SBOM
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft NT524:${{ github.sha }} -o spdx-json > sbom.spdx.json
+          syft nt524:${{ github.sha }} -o spdx-json > sbom.spdx.json
 
       # Bước 5: Quét Image với Trivy
       - name: Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'my-app:${{ github.sha }}'
+          image-ref: 'nt524:${{ github.sha }}'
           format: 'table'
           exit-code: '1' # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
           ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
