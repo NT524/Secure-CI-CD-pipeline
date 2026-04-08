@@ -4,7 +4,7 @@ env:
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
   push:
-    branches: [ "main", "dev" ] # Chạy khi có code push lên nhánh main hoặc dev
+    branches: [ "main", "dev", "feature/docker_build" ] # Chạy khi có code push lên nhánh main hoặc dev
   pull_request:
     branches: [ "main" ]        # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
