@@ -76,11 +76,28 @@ jobs:
           npm install
           npx eslint . --ext .js || true
 
+  # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
+  iac-scan:
+    name: 2e. Checkov (IaC Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run Checkov Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: terraform/
+          framework: terraform
+          # Để xử lý False Positive (ví dụ lỗi CKV_AWS_20), có thể thêm dòng sau:
+          # skip_check: CKV_AWS_20 
+
   # ---  DOCKER BUILD  ---
   build-and-test:
     name: Build & Test Application
-    # Cập nhật: Chỉ chạy khi tất cả 4 công cụ quét SAST ở trên đã hoàn thành
-    needs: [semgrep-scan, python-scan, golang-scan, javascript-scan]
+    # Cập nhật: Chỉ chạy khi tất cả 5 công cụ quét bảo mật (4 SAST + 1 IaC) ở trên đã hoàn thành
+    needs: [semgrep-scan, python-scan, golang-scan, javascript-scan, iac-scan]
     runs-on: ubuntu-latest      # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
 
     steps:
