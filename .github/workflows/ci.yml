@@ -1,16 +1,21 @@
-name: DevSecOps Baseline CI 
+name: DevSecOps Integrated Pipeline
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
   push:
-    branches: [ "main", "dev" ] # Chạy khi có code push lên nhánh main hoặc dev
+    branches: 
+      - "main"
+      - "dev"
+      - "feature/docker_build"
+      - "feature/integration" # Nhánh hợp thể của Trường và Khôi
   pull_request:
     branches: [ "main" ]         # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
 # 2. CẤU HÌNH JOBS: Các công việc cần làm
 jobs:
-  # --- KIỂM TRA HẠ TẦNG ---
+  # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
   terraform-check:
     name: 1. Terraform Validation
     runs-on: ubuntu-latest
@@ -27,7 +32,7 @@ jobs:
           terraform init
           terraform validate
 
-  # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST) ---
+  # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
   semgrep-scan:
     name: 2a. Semgrep (Multi-rules)
     needs: terraform-check
@@ -53,17 +58,17 @@ jobs:
           bandit -r . -f txt || true 
 
 # --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
-# golang-scan:
-#   name: 2c. Gosec (Go SAST)
-#   needs: terraform-check
-#   runs-on: ubuntu-latest
-#   steps:
-#     - name: 1. Checkout Source Code
-#       uses: actions/checkout@v4
-#     - name: 2. Run Gosec Security Scan
-#       uses: securego/gosec@master
-#       with:
-#         args: ./...
+#  golang-scan:
+#    name: 2c. Gosec (Go SAST)
+#    needs: terraform-check
+#    runs-on: ubuntu-latest
+#    steps:
+#      - name: 1. Checkout Source Code
+#        uses: actions/checkout@v4
+#      - name: 2. Run Gosec Security Scan
+#        uses: securego/gosec@master
+#        with:
+#          args: ./...
 
   javascript-scan:
     name: 2d. ESLint (JS Security)
@@ -96,11 +101,13 @@ jobs:
           # skip_check: CKV_AWS_20 
           skip_check: CKV2_AWS_11,CKV2_AWS_12
 
-  # ---  DOCKER BUILD  ---
+  # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
   build-and-test:
-    name: Build & Test Application
-    # Cập nhật: Chỉ chạy khi tất cả 4 công cụ quét bảo mật (3 SAST + 1 IaC) ở trên đã hoàn thành (thêm golang-scan vào nếu sau này có code Go nhé)
-    # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
+    name: 3. Build & Test Application
+    # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
+    needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
+    # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
+    if: always() 
     runs-on: ubuntu-latest      # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
 
     steps:
@@ -108,23 +115,43 @@ jobs:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      # Bước 2: Setup môi trường (Thầy để sẵn mẫu, em dùng Python hay Node thì mở comment phần đó ra nhé)
+      # Bước 2: Setup môi trường 
       # --- Dành cho NodeJS ---
       - name: 2. Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
 
-      # # --- Dành cho Python ---
-      # - name: 2. Setup Python
-      #   uses: actions/setup-python@v4
-      #   with:
-      #     python-version: '3.10'
-
       # Bước 3: Build thử Docker Image
-      - name: 3. Test Docker Build (No Push)
-        # Mục đích tuần 1: Chỉ cần build thành công, không báo lỗi là đạt. Chưa cần đẩy lên Registry.
+      - name: 3. Docker build image (No Push)
+        # Sử dụng SHA của commit làm tag để định danh Image như phần của Khôi
         run: |
           echo "Bắt đầu đóng gói ứng dụng bằng Docker..."
-          docker build -t capstone-app:test-build ./app/NodeJS/NodeGoat/
-          echo "Build thành công! Sẵn sàng cho các bài test bảo mật ở tuần sau!"
+          docker build -t nt524:${{ github.sha }} ./app/NodeJS/NodeGoat/
+          echo "Build thành công! Sẵn sàng cho các bài test bảo mật!"
+
+      # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
+      - name: 4. Generate SBOM with Syft
+        # install syft and using Syft to generate SBOM
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft nt524:${{ github.sha }} -o spdx-json > sbom.spdx.json
+      
+      # Bước 5: THÊM MỚI BƯỚC NÀY ĐỂ LƯU FILE
+      - name: 5. Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report         # Tên của file nén hiển thị trên giao diện GitHub
+          path: sbom.spdx.json      # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
+          retention-days: 7         # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
+
+      # Bước 6: Quét Image với Trivy (Nhiệm vụ Tuần 3)
+      - name: 6. Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'nt524:${{ github.sha }}'
+          format: 'table'
+          exit-code: '1' # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
+          ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
