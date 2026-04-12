@@ -9,7 +9,7 @@ on:
       - "main"
       - "dev"
       - "feature/docker_build"
-      - "feature/integration" # Nhánh hợp thể của Trường và Khôi
+      - "feature/integration" 
   pull_request:
     branches: [ "main" ]         # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
@@ -122,13 +122,16 @@ jobs:
         with:
           node-version: '18'
 
+         # # --- Dành cho Python ---
+      # - name: 2. Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.10'
+
       # Bước 3: Build thử Docker Image
       - name: 3. Docker build image (No Push)
-        # Sử dụng SHA của commit làm tag để định danh Image như phần của Khôi
-        run: |
-          echo "Bắt đầu đóng gói ứng dụng bằng Docker..."
-          docker build -t nt524:${{ github.sha }} ./app/NodeJS/NodeGoat/
-          echo "Build thành công! Sẵn sàng cho các bài test bảo mật!"
+        #pattern: ocker build -t ghcr.io/<repo_name>:<commit-sha> thay repo_name thành tên mong muốn
+        run: docker build -t nt524:${{ github.sha }} .
 
       # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
       - name: 4. Generate SBOM with Syft
