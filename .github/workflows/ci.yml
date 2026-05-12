@@ -11,6 +11,7 @@ on:
       - "dev"
       - "feature/docker_build"
       - "feature/integration" 
+      - "feature/terraform"
   pull_request:
     branches: [ "main" ]         # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
@@ -148,7 +149,9 @@ jobs:
       # Bước 3: Build thử Docker Image
       - name: 3. Docker build image (Sửa tag để chuẩn bị Push)
         # Sửa tag nt524 thành đường dẫn GHCR để có thể push và ký
-        run: docker build -t ${{ env.IMAGE_NAME }} .
+        run: 
+          cd app/NodeJS/NodeGoat/
+          docker build -t ${{ env.IMAGE_NAME }} .
 
       # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
       - name: 4. Generate SBOM with Syft
@@ -208,10 +211,21 @@ jobs:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Create Kubernetes Cluster (Kind)
-        uses: helm/kind-action@v1.10.0
+      - name: 2. Start Minikube
+        uses: medyagh/setup-minikube@master
         with:
-          cluster_name: kind # Tên mặc định của Kind
+          container-runtime: docker
+          cpus: 2
+          memory: 4000m
+      
+      - name: 4. Load image to minikube
+        run:
+          #pull image về máy ảo Ubuntu của GitHub Actions trước, sau đó load vào Minikube để chuẩn bị cho bước deploy
+          docker pull mongo:4.4
+          docker pull ${{ needs.build-and-test.outputs.full_image_name }}
+
+          minikube image load mongo:4.4 
+          minikube image load ${{ needs.build-and-test.outputs.full_image_name }}
 
       - name: 3. Setup Terraform
         uses: hashicorp/setup-terraform@v3
