@@ -218,6 +218,7 @@ jobs:
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
         run: |
           cd terraform
           terraform init -upgrade
