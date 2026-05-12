@@ -1,122 +1,48 @@
-#tfsec:ignore:aws-ec2-require-vpc-flow-logs-for-all-vpcs
-# resource "aws_vpc" "main_vpc" {
+# --- 1. KHAI BÁO BIẾN (Nếu chưa để ở file variables.tf thì để ở đây) ---
+variable "ghcr_pat" {}
+variable "app_image" {}
 
-#   cidr_block = "10.0.0.0/16"
+# --- 2. CẤU HÌNH PROVIDER ---
+terraform {
+  required_providers {
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.0"
+    }
+  }
+}
 
-#   tags = {
-#     Name = "DevSecOps-VPC-Week1"
-#     Owner = "Truong"
-#   }
-# }
+provider "kubernetes" {
+  config_path    = "~/.kube/config"
+  config_context = "minikube"
+}
 
-#isolate own namespace to avoid conflict with default namespace 
+# --- 3. TẠO NAMESPACE (Giữ 1 cái duy nhất) ---
 resource "kubernetes_namespace" "staging" {
   metadata {
     name = "staging-env"
   }
 }
 
+# --- 4. TẠO SECRET ĐỂ PULL IMAGE (Giữ 1 cái duy nhất) ---
 resource "kubernetes_secret" "ghct_secret" {
   metadata {
     name      = "ghcr-secret"
     namespace = kubernetes_namespace.staging.metadata[0].name
   }
-
   type = "kubernetes.io/dockerconfigjson"
-
   data = {
     ".dockerconfigjson" = jsonencode({
       auths = {
         "ghcr.io" = {
-          auth = base64encode("username:${var.ghcr_pat}") 
+          auth = base64encode("username:${var.ghcr_pat}")
         }
       }
     })
   }
-
 }
 
-
-# 
-resource "kubernetes_deployment" "nodegoat" {
-  metadata {
-    name      = "staging"
-    namespace = kubernetes_namespace.staging.metadata[0].name
-  }
-
-  spec {
-    #Use the "replicas" field to specify the number of desired replicas for the deployment. In this example, we set it to 3, which means that Kubernetes will maintain 3 running instances of the application at all times. If any of the instances fail or are terminated, Kubernetes will automatically create new ones to replace them, ensuring high availability for the application.
-    replicas = 3
-
-    selector {
-      match_labels = {
-        app = "nodegoat"
-      }
-    }
-
-    template {
-      metadata {
-        labels = {
-          app = "nodegoat"
-        }
-      }
-
-      spec {
-        image_pull_secrets {
-          name = kubernetes_secret.ghct_secret.metadata[0].name
-        }
-
-        container {
-          name              = "nodegoat" #rename later
-          security_context {
-            run_as_non_root = true
-            allow_privilege_escalation = false
-          }
-          image             = "nodegoat:latest"
-          image_pull_policy = "IfNotPresent"
-          command           = ["sh", "-c", "until nc -z -w 2 mongo 27017 && echo 'mongo is ready for connections' && node artifacts/db-reset.js && npm start; do sleep 2; done"]
-          port {
-            container_port = 4000
-          }
-          env {
-            name = "MONGODB_URI"
-            # "mongo" là tên của kubernetes_service mà bạn đã đặt bên dưới
-            value = "mongodb://mongo:27017/nodegoat"
-          }
-          env {
-            name  = "NODE_ENV"
-            value = ""
-          }
-        }
-
-      }
-    }
-  }
-}
-
-resource "kubernetes_service" "app_service" {
-  metadata {
-    name      = "nodegoat-service"
-    namespace = kubernetes_namespace.staging.metadata[0].name
-  }
-
-  spec {
-    selector = {
-      app = "nodegoat"
-    }
-
-    port {
-      port        = 4000
-      target_port = 4000
-      #K8s stipulates that NodePort must be within the range of 30000-32767. By specifying node_port = 30080, we are explicitly assigning the NodePort to 30080, which is within the allowed range. This means that the service will be accessible on port 30080 on each node in the cluster, and traffic sent to this port will be forwarded to the target port (80) of the selected pods.
-      node_port = 30080
-    }
-    #directly expose on the server (node) of Minikube
-    type = "NodePort"
-  }
-}
-
-# Deployment cho MongoDB
+# --- 5. DEPLOYMENT & SERVICE CHO DATABASE (MONGODB) ---
 resource "kubernetes_deployment" "mongo_deploy" {
   metadata {
     name      = "mongo"
@@ -137,7 +63,6 @@ resource "kubernetes_deployment" "mongo_deploy" {
   }
 }
 
-# Service cho MongoDB để Web gọi qua DNS "mongo"
 resource "kubernetes_service" "mongo_service" {
   metadata {
     name      = "mongo"
@@ -146,9 +71,57 @@ resource "kubernetes_service" "mongo_service" {
   spec {
     selector = { app = "mongo" }
     port {
-      port        = 27017
+      port = 27017
       target_port = 27017
     }
   }
 }
 
+# --- 6. DEPLOYMENT & SERVICE CHO WEB APP (NODEGOAT) ---
+resource "kubernetes_deployment" "nodegoat" {
+  metadata {
+    name      = "nodegoat-app"
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+  spec {
+    replicas = 3
+    selector { match_labels = { app = "nodegoat" } }
+    template {
+      metadata { labels = { app = "nodegoat" } }
+      spec {
+        image_pull_secrets {
+          name = kubernetes_secret.ghct_secret.metadata[0].name
+        }
+        container {
+          name  = "nodegoat"
+          image = var.app_image # Nhận image từ CI
+          security_context {
+            run_as_non_root = true
+            allow_privilege_escalation = false
+          }
+          command = ["sh", "-c", "until nc -z -w 2 mongo 27017 && echo 'mongo is ready' && node artifacts/db-reset.js && npm start; do sleep 2; done"]
+          port { container_port = 4000 }
+          env {
+            name  = "MONGODB_URI"
+            value = "mongodb://mongo:27017/nodegoat"
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "app_service" {
+  metadata {
+    name      = "nodegoat-service"
+    namespace = kubernetes_namespace.staging.metadata[0].name
+  }
+  spec {
+    selector = { app = "nodegoat" }
+    type     = "NodePort"
+    port {
+      port      = 4000
+      node_port = 30080
+    }
+  }
+}
