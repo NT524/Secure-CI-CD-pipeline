@@ -232,6 +232,10 @@ jobs:
           kind load docker-image mongo:4.4
           kind load docker-image ${{ needs.build-and-test.outputs.full_image_name }}
       
+      - name: 4. Deploy to Kind Cluster
+        run: | 
+          kubectl cluster-info
+          kubectl get nodes
 
       - name: 5. Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -241,7 +245,9 @@ jobs:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
+          KUBECONFIG: ~/.kube/config
         working-directory: terraform
+
         run: |
           terraform init -upgrade 
           terraform apply -auto-approve
