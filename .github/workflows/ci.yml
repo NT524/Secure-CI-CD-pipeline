@@ -140,6 +140,7 @@ jobs:
 
       # SỬA TẠI ĐÂY: Chuyển tên Repo về chữ thường để tránh lỗi Docker build
       - name: Prepare Image Name
+        id: prep
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           IMAGE_NAME=ghcr.io/${REPO_LOWER}/nodegoat:${{ github.sha }}
