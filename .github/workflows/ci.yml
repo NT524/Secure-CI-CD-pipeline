@@ -151,7 +151,7 @@ jobs:
         # Sửa tag nt524 thành đường dẫn GHCR để có thể push và ký
         working-directory: app/NodeJS/NodeGoat/
         run: |
-          docker build -t ${{ env.IMAGE_NAME }} 
+          docker build -t ${{ env.IMAGE_NAME }} .
 
       # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
       - name: 4. Generate SBOM with Syft
@@ -219,7 +219,7 @@ jobs:
           memory: 4000m
       
       - name: 4. Load image to minikube
-        run:
+        run: |
           #pull image về máy ảo Ubuntu của GitHub Actions trước, sau đó load vào Minikube để chuẩn bị cho bước deploy
           docker pull mongo:4.4
           docker pull ${{ needs.build-and-test.outputs.full_image_name }}
@@ -235,7 +235,7 @@ jobs:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
+        working-directory: terraform
         run: |
-          cd terraform
-          terraform init -upgrade
+          terraform init -upgrade 
           terraform apply -auto-approve
