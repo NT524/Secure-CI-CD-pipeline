@@ -220,5 +220,5 @@ jobs:
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
         run: |
           cd terraform
-          terraform apply -auto-approve \
-            -var="app_image=${{ needs.build-and-test.outputs.full_image_name }}"
+          terraform init -upgrade
+          terraform apply -auto-approve
