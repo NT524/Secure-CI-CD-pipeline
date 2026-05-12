@@ -13,7 +13,7 @@ terraform {
 }
 
 provider "kubernetes" {
-  config_path    = "~/.kube/config"
+  # config_path    = "~/.kube/config"
   # config_context = "minikube"
 }
 
@@ -95,6 +95,8 @@ resource "kubernetes_deployment" "nodegoat" {
         container {
           name  = "nodegoat"
           image = var.app_image # Nhận image từ CI
+          image_pull_policy = "IfNotPresent"
+
           security_context {
             run_as_non_root = true
             allow_privilege_escalation = false

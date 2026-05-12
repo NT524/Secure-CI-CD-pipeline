@@ -211,26 +211,24 @@ jobs:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Start Minikube
-        uses: medyagh/setup-minikube@master
+      - name: 2. Create Kubernetes Cluster (Kind)
+        uses: helm/kind-action@v1.10.0
         with:
-          container-runtime: docker
-          cpus: 2
-          memory: 4000m
-      
-      - name: 4. Load image to minikube
-        run: |
-          #pull image về máy ảo Ubuntu của GitHub Actions trước, sau đó load vào Minikube để chuẩn bị cho bước deploy
+          cluster_name: kind
+
+      - name: 3. Load Image
+        run: | 
           docker pull mongo:4.4
           docker pull ${{ needs.build-and-test.outputs.full_image_name }}
 
-          minikube image load mongo:4.4 
-          minikube image load ${{ needs.build-and-test.outputs.full_image_name }}
+          kind load docker-image mongo:4.4
+          kind load docker-image ${{ needs.build-and-test.outputs.full_image_name }}
+      
 
-      - name: 3. Setup Terraform
+      - name: 4. Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 4. Terraform Apply
+      - name: 5. Terraform Apply
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
