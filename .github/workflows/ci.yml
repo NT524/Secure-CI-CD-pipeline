@@ -1,7 +1,7 @@
 name: DevSecOps Integrated Pipeline
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  
+
 
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
@@ -201,23 +201,24 @@ jobs:
           rm cosign.key
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
+    needs: build-and-test
+    if: always() # Đảm bảo bước này vẫn chạy dù có lỗi ở các bước trước (ví dụ: quét bảo mật phát hiện lỗ hổng)
     runs-on: ubuntu-latest
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: 2. Create Kubernetes Cluster (Kind)
+        uses: helm/kind-action@v1.10.0
 
-      - name: 3. Terraform Init
-        run: cd terraform && terraform init
+      - name: 3. Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
       - name: 4. Terraform Apply
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
         run: |
           cd terraform
-          terraform init
-          terraform apply -auto-approve 
+          terraform apply -auto-approve \
+            -var="app_image=${{ needs.build-and-test.outputs.full_image_name }}"
