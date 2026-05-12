@@ -13,8 +13,8 @@ terraform {
 }
 
 provider "kubernetes" {
-  config_path    = "~/.kube/config"
-  config_context = "minikube"
+  # config_path    = "~/.kube/config"
+  # config_context = "minikube"
 }
 
 # --- 3. TẠO NAMESPACE (Giữ 1 cái duy nhất) ---
