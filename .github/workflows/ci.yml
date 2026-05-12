@@ -149,8 +149,8 @@ jobs:
       # Bước 3: Build thử Docker Image
       - name: 3. Docker build image (Sửa tag để chuẩn bị Push)
         # Sửa tag nt524 thành đường dẫn GHCR để có thể push và ký
-        run: 
-          cd app/NodeJS/NodeGoat/
+        working-directory: app/NodeJS/NodeGoat/
+        run: |
           docker build -t ${{ env.IMAGE_NAME }} 
 
       # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
