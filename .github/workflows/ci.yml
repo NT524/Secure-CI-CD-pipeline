@@ -216,8 +216,15 @@ jobs:
         uses: helm/kind-action@v1.10.0
         with:
           cluster_name: kind
+      
+      - name: 3. Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 3. Load Image
+      - name: 4. Load Image
         run: | 
           docker pull mongo:4.4
           docker pull ${{ needs.build-and-test.outputs.full_image_name }}
@@ -226,10 +233,10 @@ jobs:
           kind load docker-image ${{ needs.build-and-test.outputs.full_image_name }}
       
 
-      - name: 4. Setup Terraform
+      - name: 5. Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 5. Terraform Apply
+      - name: 6. Terraform Apply
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
