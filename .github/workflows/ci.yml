@@ -202,6 +202,7 @@ jobs:
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
     needs: build-and-test
+    if: ${{ needs.build-and-test.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: 1. Checkout Source Code
