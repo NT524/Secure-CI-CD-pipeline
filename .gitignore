@@ -3,7 +3,7 @@
 # *.key
 # *.crt
 *.tfstate*
-.terraform.lock.hcl
+*.terraform.lock.hcl
 .venv
 .log
 .md
