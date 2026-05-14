@@ -18,3 +18,7 @@ variable "cluster_name" {
   type        = string
   default     = "kind"
 }
+
+variable "k8s_namespace" {
+  type = string
+}

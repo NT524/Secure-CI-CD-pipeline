@@ -210,7 +210,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
-      TF_VAR_cluster_name: nodegoat-cluster
+      namespace: nodegoat-staging
+      cluster_name: nodegoat-cluster
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
@@ -235,7 +236,8 @@ jobs:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
-          
+          TF_VAR_cluster_name: ${{ env.cluster_name }}
+          TF_VAR_namespace: ${{ env.namespace }}
         working-directory: terraform
 
         run: |
@@ -252,24 +254,24 @@ jobs:
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
 
           # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
-          kubectl apply -f k8s/ -n nodegoat-staging
+          kubectl apply -f k8s/ -n ${{ env.namespace }}
 
       - name: 7. Health Check
         run: |
 
           echo "--- Trạng thái các Pod ---"
-          kubectl get pods -n nodegoat-staging
+          kubectl get pods -n ${{ env.namespace }}
 
           echo "--- Đợi Deployment hoàn tất ---"
           # Chờ tối đa 2 phút cho mỗi service
-          kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=120s
-          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=120s
+          kubectl rollout status deployment/mongodb -n ${{ env.namespace }} --timeout=120s
+          kubectl rollout status deployment/nodegoat-app -n ${{ env.namespace }} --timeout=120s
 
           echo "--- Kiểm tra log ứng dụng nếu cần ---"
           # Lệnh này giúp bạn xem app có kết nối DB thành công không
-          kubectl logs -l app=nodegoat -n nodegoat-staging --tail=20 --all-containers=true
+          kubectl logs -l app=nodegoat -n ${{ env.namespace }} --tail=20 --all-containers=true
 
       - name: 8. Integration Test (Curl App)
         run: |
-          kubectl get svc -n ${TF_VAR_cluster_name}
-          kubectl get pods -n ${TF_VAR_cluster_name}
+          kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n ${{ env.namespace }}

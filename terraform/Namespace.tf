@@ -1,7 +1,7 @@
 # Create a Kubernetes namespace for the NodeGoat staging environment
 resource "kubernetes_namespace" "nodegoat_staging" {
   metadata {
-    name = "nodegoat-staging"
+    name = var.k8s_namespace
     labels ={
         environment = "staging"
         app         = "nodegoat"
