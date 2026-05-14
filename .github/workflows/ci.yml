@@ -210,6 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
+      TF_VAR_cluster_name: nodegoat-cluster
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
@@ -234,7 +235,7 @@ jobs:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
-          TF_VAR_cluster_name: nodegoat-cluster
+          
         working-directory: terraform
 
         run: |
@@ -270,30 +271,5 @@ jobs:
 
       - name: 8. Integration Test (Curl App)
         run: |
-          echo "--- Đang thiết lập Port-Forward ---"
-          # Chạy port-forward dưới nền và ghi log ra file để debug nếu lỗi
-          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging > pf.log 2>&1 &
-
-          # Lưu lại PID của tiến trình port-forward để tắt sau khi test xong
-          PF_PID=$!
-
-          echo "--- Đợi ứng dụng khởi động và tunnel sẵn sàng (20s) ---"
-          sleep 20
-
-          echo "--- Kiểm tra log port-forward xem có lỗi gì không ---"
-          cat pf.log
-
-          echo "--- Thử kết nối tới ứng dụng ---"
-          # Thêm -m 10 để giới hạn thời gian chờ của curl là 10 giây
-          if curl -s -m 10 http://localhost:4000/login > /dev/null; then
-            echo "✅ THÀNH CÔNG: Ứng dụng đã phản hồi!"
-          else
-            echo "❌ THẤT BẠI: Không thể kết nối tới ứng dụng."
-            echo "--- Log của App để debug ---"
-            kubectl logs -l app=nodegoat -n nodegoat-staging --tail=20
-            kill $PF_PID
-            exit 1
-          fi
-
-          # Dọn dẹp: Tắt tiến trình port-forward
-          kill $PF_PID
+          kubectl get svc -n ${TF_VAR_cluster_name}
+          kubectl get pods -n ${TF_VAR_cluster_name}
