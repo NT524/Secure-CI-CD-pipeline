@@ -211,33 +211,24 @@ jobs:
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
-
-      - name: 2. Create Kubernetes Cluster (Kind)
-        uses: helm/kind-action@v1.10.0
-        with:
-          cluster_name: nodegoat-namespace
       
-      - name: 3. Log in to GitHub Container Registry
+      - name: 2. Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 4. Load Image
+      - name: 3. Pull Image
         run: | 
-          docker pull mongo:4.4
+          # dockerpull mogo:4.4
           docker pull ${{ needs.build-and-test.outputs.full_image_name }}
       
-      - name: 4. Check to Kind Cluster
-        run: | 
-          kubectl cluster-info
-          kubectl get nodes
 
-      - name: 5. Setup Terraform
+      - name: 4. Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 6. Terraform Apply
+      - name: 5. Terraform Apply
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
@@ -250,11 +241,13 @@ jobs:
           terraform init -upgrade 
           terraform apply -auto-approve
 
-      - name: 7. Wait for Deployment & Health Check
+      - name: 6. Wait for Deployment & Health Check
         run: |
-          # Chờ MongoDB và App sẵn sàng
-          kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=90s
-          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
+          # Kiểm tra xem cluster đã lên chưa
+          kubectl cluster-info
           
-          # Debug nếu có lỗi
+          # Chờ các tài nguyên
+          kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=120s
+          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=120s
+          
           kubectl get pods -n nodegoat-staging
