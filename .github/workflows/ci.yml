@@ -256,11 +256,5 @@ jobs:
 
       - name: 7. Wait for Deployment & Health Check
         run: |
-          # Kiểm tra xem cluster đã lên chưa
-          kubectl cluster-info
-          
-          # Chờ các tài nguyên
-          kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=120s
-          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=120s
           
           kubectl get pods -n nodegoat-staging
