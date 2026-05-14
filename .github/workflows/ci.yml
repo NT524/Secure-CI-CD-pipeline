@@ -268,3 +268,23 @@ jobs:
           echo "--- Kiểm tra log ứng dụng nếu cần ---"
           # Lệnh này giúp bạn xem app có kết nối DB thành công không
           kubectl logs -l app=nodegoat -n nodegoat-staging --tail=20
+          
+      - name: 8. Integration Test (Curl App)
+        run: |
+          # 1. Chạy Port-forwarding vào background
+          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
+          
+          # 2. Đợi một chút để tunnel sẵn sàng
+          sleep 5
+          
+          # 3. Kiểm tra mã phản hồi HTTP (kỳ vọng là 200 OK hoặc 302 Redirect)
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/login)
+          
+          echo "Ứng dụng phản hồi với HTTP Code: $RESPONSE"
+          
+          if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "302" ]; then
+            echo "--- TEST THÀNH CÔNG: App đã online! ---"
+          else
+            echo "--- TEST THẤT BẠI: App trả về lỗi $RESPONSE ---"
+            exit 1
+          fi
