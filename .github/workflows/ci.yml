@@ -2,18 +2,17 @@ name: DevSecOps Integrated Pipeline
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
   push:
-    branches: 
+    branches:
       - "main"
       - "dev"
       - "feature/docker_build"
-      - "feature/integration" 
+      - "feature/integration"
       - "feature/terraform"
   pull_request:
-    branches: [ "main" ]         # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
+    branches: ["main"] # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
 # 2. CẤU HÌNH JOBS: Các công việc cần làm
 jobs:
@@ -57,20 +56,20 @@ jobs:
       - name: 2. Run Bandit Scan
         run: |
           pip install bandit
-          bandit -r . -f txt || true 
+          bandit -r . -f txt || true
 
-# --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
-#  golang-scan:
-#    name: 2c. Gosec (Go SAST)
-#    needs: terraform-check
-#    runs-on: ubuntu-latest
-#    steps:
-#      - name: 1. Checkout Source Code
-#        uses: actions/checkout@v4
-#      - name: 2. Run Gosec Security Scan
-#        uses: securego/gosec@master
-#        with:
-#          args: ./...
+  # --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
+  #  golang-scan:
+  #    name: 2c. Gosec (Go SAST)
+  #    needs: terraform-check
+  #    runs-on: ubuntu-latest
+  #    steps:
+  #      - name: 1. Checkout Source Code
+  #        uses: actions/checkout@v4
+  #      - name: 2. Run Gosec Security Scan
+  #        uses: securego/gosec@master
+  #        with:
+  #          args: ./...
 
   javascript-scan:
     name: 2d. ESLint (JS Security)
@@ -100,7 +99,7 @@ jobs:
           directory: terraform/
           framework: terraform
           # Để xử lý False Positive (ví dụ lỗi CKV_AWS_20), có thể thêm dòng sau:
-          # skip_check: CKV_AWS_20 
+          # skip_check: CKV_AWS_20
           skip_check: CKV2_AWS_11,CKV2_AWS_12
 
   # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
@@ -109,8 +108,8 @@ jobs:
     # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
     needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
     # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
-    if: always() 
-    runs-on: ubuntu-latest      # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
+    if: always()
+    runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
     outputs:
       full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
 
@@ -125,14 +124,14 @@ jobs:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      # Bước 2: Setup môi trường 
+      # Bước 2: Setup môi trường
       # --- Dành cho NodeJS ---
       - name: 2. Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: "18"
 
-         # # --- Dành cho Python ---
+          # # --- Dành cho Python ---
       # - name: 2. Setup Python
       #   uses: actions/setup-python@v4
       #   with:
@@ -160,25 +159,25 @@ jobs:
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json
-      
+
       # Bước 5: THÊM MỚI BƯỚC NÀY ĐỂ LƯU FILE
       - name: 5. Upload SBOM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-report         # Tên của file nén hiển thị trên giao diện GitHub
-          path: sbom.spdx.json      # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
-          retention-days: 7         # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
+          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
+          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
+          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
 
       # Bước 6: Quét Image với Trivy (Nhiệm vụ Tuần 3)
       - name: 6. Run Trivy Vulnerability Scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: '${{ env.IMAGE_NAME }}'
-          format: 'table'
-          exit-code: '0' # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
+          image-ref: "${{ env.IMAGE_NAME }}"
+          format: "table"
+          exit-code: "0" # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
           ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
 
       # --- CẤU HÌNH BỔ SUNG TUẦN 4: PUSH & SIGN IMAGE (Nhiệm vụ của Trường) ---
 
@@ -203,7 +202,7 @@ jobs:
           echo "$COSIGN_PRIVATE_KEY" > cosign.key
           cosign sign --key cosign.key ${{ env.IMAGE_NAME }}
           rm cosign.key
-  
+
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
     needs: build-and-test
@@ -214,7 +213,7 @@ jobs:
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
-      
+
       - name: 2. Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -223,10 +222,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 3. Pull Image
-        run: | 
+        run: |
           # dockerpull mogo:4.4
           docker pull ${{ needs.build-and-test.outputs.full_image_name }}
-      
 
       - name: 4. Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -251,40 +249,40 @@ jobs:
           # 1. Thay thế biến image vào các file YAML
           # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
-          
+
           # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
           kubectl apply -f k8s/ -n nodegoat-staging
 
       - name: 7. Health Check
         run: |
-          
+
           echo "--- Trạng thái các Pod ---"
           kubectl get pods -n nodegoat-staging
-          
+
           echo "--- Đợi Deployment hoàn tất ---"
           # Chờ tối đa 2 phút cho mỗi service
           kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=120s
           kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=120s
-          
+
           echo "--- Kiểm tra log ứng dụng nếu cần ---"
           # Lệnh này giúp bạn xem app có kết nối DB thành công không
-          kubectl logs -l app=nodegoat -n nodegoat-staging --tail=20
+          kubectl logs -l app=nodegoat -n nodegoat-staging --tail=20 --all-containers=true
 
       - name: 8. Integration Test (Curl App)
         run: |
           echo "--- Đang thiết lập Port-Forward ---"
           # Chạy port-forward dưới nền và ghi log ra file để debug nếu lỗi
           kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging > pf.log 2>&1 &
-          
+
           # Lưu lại PID của tiến trình port-forward để tắt sau khi test xong
           PF_PID=$!
-          
+
           echo "--- Đợi ứng dụng khởi động và tunnel sẵn sàng (20s) ---"
           sleep 20
-          
+
           echo "--- Kiểm tra log port-forward xem có lỗi gì không ---"
           cat pf.log
-          
+
           echo "--- Thử kết nối tới ứng dụng ---"
           # Thêm -m 10 để giới hạn thời gian chờ của curl là 10 giây
           if curl -s -m 10 http://localhost:4000/login > /dev/null; then
@@ -296,6 +294,6 @@ jobs:
             kill $PF_PID
             exit 1
           fi
-          
+
           # Dọn dẹp: Tắt tiến trình port-forward
           kill $PF_PID
