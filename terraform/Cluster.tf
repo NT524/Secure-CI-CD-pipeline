@@ -12,3 +12,8 @@ resource "kind_cluster" "nodegoat" {
     }
   }
 }
+#export kubeconfig to local file
+resource "local_file" "kubeconfig" {
+  content  = kind_cluster.nodegoat.kubeconfig
+  filename = "${path.module}/kubeconfig"
+}

@@ -241,7 +241,20 @@ jobs:
           terraform init -upgrade 
           terraform apply -auto-approve
 
-      - name: 6. Wait for Deployment & Health Check
+      - name: 6. Deploy Application Manifests
+        env:
+          APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
+          # Trỏ KUBECONFIG vào file mà Terraform vừa xuất ra
+          KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
+        run: |
+          # 1. Thay thế biến image vào các file YAML
+          # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
+          sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
+          
+          # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
+          kubectl apply -f k8s/ -n nodegoat-staging
+
+      - name: 7. Wait for Deployment & Health Check
         run: |
           # Kiểm tra xem cluster đã lên chưa
           kubectl cluster-info

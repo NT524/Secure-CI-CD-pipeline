@@ -16,7 +16,7 @@ spec:
       containers:
       - name: nodegoat
         # Thay thế bằng image bạn đã build ở Bước 1
-        image: ghcr.io/huynhkhoi2711/nodegoat:staging
+        image: ${app_image}
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 4000
