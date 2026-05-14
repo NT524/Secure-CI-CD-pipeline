@@ -233,8 +233,8 @@ jobs:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
-          TF_VAR_cluster_name: nodegoat-namespace
-          KUBECONFIG: ~/.kube/config
+          TF_VAR_cluster_name: nodegoat-cluster
+          KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
         working-directory: terraform
 
         run: |
