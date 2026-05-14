@@ -12,11 +12,3 @@ resource "kind_cluster" "nodegoat" {
     }
   }
 }
-
-# Đảm bảo các tài nguyên khác (Namespace, Image Load) phải đợi Cluster xong
-resource "kubernetes_namespace" "nodegoat_staging" {
-  metadata {
-    name = "nodegoat-staging"
-  }
-  depends_on = [kind_cluster.nodegoat]
-}
