@@ -7,7 +7,7 @@ resource "null_resource" "kind_load_images" {
   # Load image mongo mặc định và image app mới build
   provisioner "local-exec" {
     command = <<EOT
-      kind load docker-image mongo:4.4 --name ${var.cluster_name}
+    #   kind load docker-image mongo:4.4 --name ${var.cluster_name}
       kind load docker-image ${var.app_image} --name ${var.cluster_name}
     EOT
   }
