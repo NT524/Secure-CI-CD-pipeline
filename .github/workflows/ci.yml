@@ -269,9 +269,21 @@ jobs:
 
           echo "--- Kiểm tra log ứng dụng nếu cần ---"
           # Lệnh này giúp bạn xem app có kết nối DB thành công không
-          kubectl logs -l app=nodegoat -n ${{ env.namespace }} --tail=20 --all-containers=true
+          kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n ${{ env.namespace }}
 
       - name: 8. Integration Test (Curl App)
         run: |
           kubectl get svc -n ${{ env.namespace }}
           kubectl get pods -n ${{ env.namespace }}
+
+
+          echo "--- Đang kiểm tra cổng mạng bên trong Pod ---"
+          # Kiểm tra xem có dòng nào chứa ':4000' và 'LISTEN' không
+          if kubectl exec deployment/nodegoat-app -n ${{ env.namespace }} -- netstat -tulpn | grep -q ":4000.*LISTEN"; then
+            echo "✅ Node.js đang lắng nghe trên cổng 4000"
+          else
+            echo "❌ Không tìm thấy cổng 4000 đang LISTEN"
+            kubectl logs deployment/nodegoat-app -n ${{ env.namespace }} --tail=20
+            exit 1
+          fi
