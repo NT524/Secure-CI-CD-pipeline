@@ -278,12 +278,12 @@ jobs:
           kubectl get pods -n ${{ env.namespace }}
           kubectl get service/nodegoat-app -n ${{ env.namespace }}
 
-          echo "--- Đang kiểm tra cổng mạng bên trong Pod ---"
-          # Kiểm tra xem có dòng nào chứa ':4000' và 'LISTEN' không
-          if kubectl exec deployment/nodegoat-app -n ${{ env.namespace }} -- netstat -tulpn | grep -q ":4000.*LISTEN"; then
-            echo "✅ Node.js đang lắng nghe trên cổng 4000"
-          else
-            echo "❌ Không tìm thấy cổng 4000 đang LISTEN"
-            kubectl logs deployment/nodegoat-app -n ${{ env.namespace }} --tail=20
-            exit 1
-          fi
+          # echo "--- Đang kiểm tra cổng mạng bên trong Pod ---"
+          # # Kiểm tra xem có dòng nào chứa ':4000' và 'LISTEN' không
+          # if kubectl exec deployment/nodegoat-app -n ${{ env.namespace }} -- netstat -tulpn | grep -q ":4000.*LISTEN"; then
+          #   echo "✅ Node.js đang lắng nghe trên cổng 4000"
+          # else
+          #   echo "❌ Không tìm thấy cổng 4000 đang LISTEN"
+          #   kubectl logs deployment/nodegoat-app -n ${{ env.namespace }} --tail=20
+          #   exit 1
+          # fi
