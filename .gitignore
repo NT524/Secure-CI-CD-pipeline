@@ -5,7 +5,7 @@ terraform/
 *.tfstate*
 *terraform.lock.hcl
 .venv
-.log
+logs.log
 .md
 Test/*
 *.key
