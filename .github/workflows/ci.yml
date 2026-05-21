@@ -287,22 +287,16 @@ jobs:
         id: get-endpoint
         run: |
           kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
-          echo "Chờ 30s để K8s cấp External IP/Hostname..."
-          sleep 30
+          echo "--- Bật Port-Forward ngầm để expose ClusterIP ra Runner ---"
+          # Chạy port-forward ngầm (background process)
+          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
           
-          # Lấy External IP từ Service LoadBalancer của NodeGoat
-          EXT_IP=$(kubectl get svc nodegoat-app -n ${{ env.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          echo "Chờ 10s để Port-Forward ổn định..."
+          sleep 10
           
-          # Nếu chạy trên AWS/AWS EKS, nó sẽ trả về Hostname thay vì IP, ta kiểm tra thêm:
-          if [ -z "$EXT_IP" ]; then
-            EXT_IP=$(kubectl get svc nodegoat-app -n ${{ env.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          fi
-          
-          # Gán giá trị vào biến Output của GitHub Actions (Giả sử app chạy port 4000 hoặc đã mapped qua port 80)
-          # Em có thể sửa thành http://${EXT_IP}:4000 nếu Service của em không map về port 80 công khai
-          URL="http://${EXT_IP}"
+          URL="http://localhost:4000"
           echo "STAGING_URL=${URL}" >> $GITHUB_OUTPUT
-          echo "🎯 Đã tìm thấy URL Staging: ${URL}"
+          echo "🎯 Đã tạo URL Staging nội bộ trong Runner: ${URL}"
 
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
