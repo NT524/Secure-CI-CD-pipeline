@@ -299,7 +299,7 @@ jobs:
           cat port-forward.log
           
           echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
-          curl -I -s --connect-timeout 5 $URL || echo "⚠️ Vẫn chưa kết nối thành công, hãy đọc LOG ở mục 3 để tìm nguyên nhân!"
+          curl -I http://localhost:4000 --connect-timeout 5 $URL || echo "⚠️ Vẫn chưa kết nối thành công, hãy đọc LOG ở mục 3 để tìm nguyên nhân!"
 
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
