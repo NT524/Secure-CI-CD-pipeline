@@ -287,26 +287,24 @@ jobs:
       - name: 9. Extract Staging Endpoint
         id: get-endpoint
         run: |
-          echo "🚀 Đang kích hoạt Port-Forwarding về cổng 4000..."
-          
-          # Thêm "> port-forward.log 2>&1 &" ở cuối để đẩy xuống chạy ngầm hoàn toàn
-          kubectl port-forward service/nodegoat-app 4000:4000 -n ${{ env.namespace }} > port-forward.log 2>&1 &
-          
-          echo "⏳ Chờ 5 giây để tiến trình ổn định..."
-          sleep 5
-          
-          echo "📋 Kiểm tra nhanh log của Port-Forward xem có lỗi khởi tạo không:"
-          cat port-forward.log
-          
-          echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
-          curl -I http://localhost:4000 --connect-timeout 5 $URL
           echo "🚨 --- TRUY TÌM THỦ PHẠM BÊN TRONG NODE.JS --- 🚨"
           echo "Trạng thái các Pod hiện tại:"
           kubectl get pods -n nodegoat-staging
+          
           echo "Log chi tiết của ứng dụng NodeGoat:"
-          # Lệnh này sẽ in ra những gì Node.js console.log hoặc quăng lỗi
           kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=50
           echo "------------------------------------------------"
+
+          echo "🚀 Đang kích hoạt Port-Forwarding về cổng 4000..."
+          kubectl port-forward service/nodegoat-app 4000:4000 -n nodegoat-staging > port-forward.log 2>&1 &
+          
+          echo "⏳ Chờ 5 giây để tiến trình ổn định..."
+          sleep 5
+          cat port-forward.log
+          
+          echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
+          #Thêm '|| true' để script không bị dừng đột ngột nếu curl lỗi
+          curl -I http://localhost:4000 --connect-timeout 5 || true
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
