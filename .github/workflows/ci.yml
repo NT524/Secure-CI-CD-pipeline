@@ -313,6 +313,10 @@ jobs:
           
           echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
           curl -I http://localhost:4000 --connect-timeout 5 $URL || cat port-forward.log
+      - name: 3. Run OWASP ZAP Against Localhost
+        run: |
+          # Thêm --network="host" để Docker ZAP nhìn thấy cổng 4000 của máy host
+          docker run --user root --network="host" -v $(pwd)/zap_workspace:/zap/wrk:rw -t ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /zap/wrk/plan.yaml || true
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
@@ -322,92 +326,92 @@ jobs:
   #     issues: write
   #     contents: read
     
-    steps:
-      - name: 1. Checkout Source Code
-        uses: actions/checkout@v4
+    # steps:
+    #   - name: 1. Checkout Source Code
+    #     uses: actions/checkout@v4
 
-      # Đọc file zap-automation và nạp biến môi trường động từ Cloud AWS
-      - name: 2. Prepare ZAP Automation Plan
-        env:
-          TARGET_URL: ${{ needs.deploy-staging.outputs.staging_url }}
-          # Sử dụng tài khoản test mặc định của NodeGoat (Đã bị giới hạn quyền trong DB)
-          TEST_USER: "user1"
-          TEST_PASSWORD: "password"
-        run: |
-          mkdir -p zap_workspace
-          cp zap-automation.yaml zap_workspace/plan.yaml
+    #   # Đọc file zap-automation và nạp biến môi trường động từ Cloud AWS
+    #   - name: 2. Prepare ZAP Automation Plan
+    #     env:
+    #       TARGET_URL: ${{ needs.deploy-staging.outputs.staging_url }}
+    #       # Sử dụng tài khoản test mặc định của NodeGoat (Đã bị giới hạn quyền trong DB)
+    #       TEST_USER: "user1"
+    #       TEST_PASSWORD: "password"
+    #     run: |
+    #       mkdir -p zap_workspace
+    #       cp zap-automation.yaml zap_workspace/plan.yaml
           
-          # Thay thế các biến môi trường vào file cấu hình của ZAP
-          sed -i "s|\${TARGET_URL}|$TARGET_URL|g" zap_workspace/plan.yaml
-          sed -i "s|\${TEST_USER}|$TEST_USER|g" zap_workspace/plan.yaml
-          sed -i "s|\${TEST_PASSWORD}|$TEST_PASSWORD|g" zap_workspace/plan.yaml
+    #       # Thay thế các biến môi trường vào file cấu hình của ZAP
+    #       sed -i "s|\${TARGET_URL}|$TARGET_URL|g" zap_workspace/plan.yaml
+    #       sed -i "s|\${TEST_USER}|$TEST_USER|g" zap_workspace/plan.yaml
+    #       sed -i "s|\${TEST_PASSWORD}|$TEST_PASSWORD|g" zap_workspace/plan.yaml
 
-      - name: 3. Run OWASP ZAP (Baseline + Active Authenticated Scan)
-        run: |
-          echo "🚀 Khởi động Docker OWASP ZAP bọc đánh Staging Endpoint..."
-          # Chạy container chính chủ của ZAP, ánh xạ thư mục zap_workspace vào trong container
-          docker run --user root -v $(pwd)/zap_workspace:/zap/wrk:rw -t ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /zap/wrk/plan.yaml || true
+    #   - name: 3. Run OWASP ZAP (Baseline + Active Authenticated Scan)
+    #     run: |
+    #       echo "🚀 Khởi động Docker OWASP ZAP bọc đánh Staging Endpoint..."
+    #       # Chạy container chính chủ của ZAP, ánh xạ thư mục zap_workspace vào trong container
+    #       docker run --user root -v $(pwd)/zap_workspace:/zap/wrk:rw -t ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /zap/wrk/plan.yaml || true
 
-      # ========================================================
-      # BƯỚC ĐẮT GIÁ: PARSE REPORT JSON & BIẾN ĐỔI THÀNH GITHUB ANNOTATIONS/ISSUES
-      # ========================================================
-      - name: 4. Parse ZAP Report & Generate Security Governance
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: python
-        run: |
-          import json
-          import os
-          import subprocess
+    #   # ========================================================
+    #   # BƯỚC ĐẮT GIÁ: PARSE REPORT JSON & BIẾN ĐỔI THÀNH GITHUB ANNOTATIONS/ISSUES
+    #   # ========================================================
+    #   - name: 4. Parse ZAP Report & Generate Security Governance
+    #     env:
+    #       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #     shell: python
+    #     run: |
+    #       import json
+    #       import os
+    #       import subprocess
 
-          report_path = "zap_workspace/zap-report.json"
-          if not os.path.exists(report_path):
-              print("❌ Không tìm thấy file báo cáo từ ZAP.")
-              exit(0)
+    #       report_path = "zap_workspace/zap-report.json"
+    #       if not os.path.exists(report_path):
+    #           print("❌ Không tìm thấy file báo cáo từ ZAP.")
+    #           exit(0)
 
-          with open(report_path, "r") as f:
-              data = json.load(f)
+    #       with open(report_path, "r") as f:
+    #           data = json.load(f)
 
-          # Trích xuất danh sách các lỗ hổng tìm được
-          alerts = data.get("site", [{}])[0].get("alerts", [])
+    #       # Trích xuất danh sách các lỗ hổng tìm được
+    #       alerts = data.get("site", [{}])[0].get("alerts", [])
           
-          critical_findings = []
+    #       critical_findings = []
           
-          print("--- 📋 PHÂN TÍCH KẾT QUẢ DAST ---")
-          for alert in alerts:
-              risk = alert.get("riskcode") # 3: High, 2: Medium, 1: Low
-              risk_desc = alert.get("riskdesc")
-              name = alert.get("alert")
-              desc = alert.get("desc")
-              solution = alert.get("solution")
+    #       print("--- 📋 PHÂN TÍCH KẾT QUẢ DAST ---")
+    #       for alert in alerts:
+    #           risk = alert.get("riskcode") # 3: High, 2: Medium, 1: Low
+    #           risk_desc = alert.get("riskdesc")
+    #           name = alert.get("alert")
+    #           desc = alert.get("desc")
+    #           solution = alert.get("solution")
               
-              # 1. Tạo GitHub Annotations cho từng lỗ hổng xuất hiện trong Log của Workflow
-              if risk in ["3", "2"]: # Lọc lỗi High và Medium
-                  print(f"::error title=[DAST Vulnerability - {risk_desc}]::{name} -> {alert.get('url')}")
+    #           # 1. Tạo GitHub Annotations cho từng lỗ hổng xuất hiện trong Log của Workflow
+    #           if risk in ["3", "2"]: # Lọc lỗi High và Medium
+    #               print(f"::error title=[DAST Vulnerability - {risk_desc}]::{name} -> {alert.get('url')}")
               
-              # 2. Gom các lỗi nặng (High) để chuẩn bị tạo GitHub Issue Chặn đợt Release
-              if risk == "3":
-                  critical_findings.append(f"### 🚨 {name}\n- **Mức độ nguy hiểm:** {risk_desc}\n- **Mô tả:** {desc}\n- **Khắc phục:** {solution}\n\n")
+    #           # 2. Gom các lỗi nặng (High) để chuẩn bị tạo GitHub Issue Chặn đợt Release
+    #           if risk == "3":
+    #               critical_findings.append(f"### 🚨 {name}\n- **Mức độ nguy hiểm:** {risk_desc}\n- **Mô tả:** {desc}\n- **Khắc phục:** {solution}\n\n")
 
-          # Nếu có lỗi Nguy hiểm (High), dùng GitHub CLI tự động tạo Issue giao việc cho Dev
-          if critical_findings:
-              print(f"⚠️ Phát hiện {len(critical_findings)} lỗi bảo mật nghiêm trọng! Đang tạo GitHub Issue...")
-              issue_body = "## 🛡️ BÁO CÁO PHÁT HIỆN LỖ HỔNG BẢO MẬT (DAST SCAN)\n\n" + "".join(critical_findings)
+    #       # Nếu có lỗi Nguy hiểm (High), dùng GitHub CLI tự động tạo Issue giao việc cho Dev
+    #       if critical_findings:
+    #           print(f"⚠️ Phát hiện {len(critical_findings)} lỗi bảo mật nghiêm trọng! Đang tạo GitHub Issue...")
+    #           issue_body = "## 🛡️ BÁO CÁO PHÁT HIỆN LỖ HỔNG BẢO MẬT (DAST SCAN)\n\n" + "".join(critical_findings)
               
-              # Ghi file tạm để truyền vào body của Issue
-              with open("issue_body.md", "w") as ib:
-                  ib.write(issue_body)
+    #           # Ghi file tạm để truyền vào body của Issue
+    #           with open("issue_body.md", "w") as ib:
+    #               ib.write(issue_body)
                   
-              subprocess.run([
-                  "gh", "issue", "create",
-                  "--title", "🚨 [DAST Alert] Phát hiện lỗ hổng nghiêm trọng trên môi trường Staging",
-                  "--body-file", "issue_body.md",
-                  "--label", "security",
-                  "--assignee", "${{ github.actor }}"
-              ])
+    #           subprocess.run([
+    #               "gh", "issue", "create",
+    #               "--title", "🚨 [DAST Alert] Phát hiện lỗ hổng nghiêm trọng trên môi trường Staging",
+    #               "--body-file", "issue_body.md",
+    #               "--label", "security",
+    #               "--assignee", "${{ github.actor }}"
+    #           ])
               
-              # Ép gãy pipeline để không cho phép deploy lên Production (Security Gate)
-              print("❌ Pipeline dừng lại do không vượt qua bài kiểm tra bảo mật DAST!")
-              exit(1)
-          else:
-              print("✅ Tuyệt vời! Không phát hiện lỗ hổng nguy hiểm ở mức High/Critical.")
+    #           # Ép gãy pipeline để không cho phép deploy lên Production (Security Gate)
+    #           print("❌ Pipeline dừng lại do không vượt qua bài kiểm tra bảo mật DAST!")
+    #           exit(1)
+    #       else:
+    #           print("✅ Tuyệt vời! Không phát hiện lỗ hổng nguy hiểm ở mức High/Critical.")
