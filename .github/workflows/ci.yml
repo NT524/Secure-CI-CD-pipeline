@@ -286,17 +286,26 @@ jobs:
       - name: 9. Extract Staging Endpoint
         id: get-endpoint
         run: |
-          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
-          echo "--- Bật Port-Forward ngầm để expose ClusterIP ra Runner ---"
-          # Chạy port-forward ngầm (background process)
-          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
+          echo "--- 1. Dọn dẹp cổng (nếu bị kẹt) ---"
+          # Tiêu diệt mọi tiến trình đang dùng cổng 4000 hoặc 8080 (bỏ qua nếu không có)
+          sudo fuser -k 4000/tcp || true
+          sudo fuser -k 8080/tcp || true
+          
+          echo "--- 2. Bật Port-Forward ngầm ---"
+          # Mở cổng 8080 trên Runner, trỏ vào cổng 4000 của K8s
+          kubectl port-forward svc/nodegoat-app 8080:4000 -n nodegoat-staging &
           
           echo "Chờ 10s để Port-Forward ổn định..."
           sleep 10
           
-          URL="http://localhost:4000"
+          # 3. Cập nhật biến URL thành cổng 8080
+          URL="http://localhost:8080"
           echo "STAGING_URL=${URL}" >> $GITHUB_OUTPUT
+          
           echo "🎯 Đã tạo URL Staging nội bộ trong Runner: ${URL}"
+          
+          echo "--- 4. Kiểm tra kết nối thử ---"
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" $URL
 
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
