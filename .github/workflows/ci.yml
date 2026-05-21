@@ -199,6 +199,9 @@ jobs:
     name: 4. Deploy to AWS Free Tier Staging
     runs-on: ubuntu-latest
     needs: build-and-test # Nhớ map đúng tên job build image trước đó của nhóm em
+    permissions:
+      id-token: write # Quyền bắt buộc để tương tác với AWS STS OIDC
+      contents: read  # Quyền đọc source code từ kho lưu trữ
     outputs:
       staging_url: http://${{ steps.get-ip.outputs.EC2_IP }}
     
