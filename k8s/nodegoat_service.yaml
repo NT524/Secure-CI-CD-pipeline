@@ -4,10 +4,10 @@ metadata:
   name: nodegoat-app
   namespace: nodegoat-staging
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: nodegoat
   ports:
   - protocol: TCP
-    port: 4000
+    port: 80
     targetPort: 4000

@@ -1,4 +1,7 @@
 name: DevSecOps Integrated Pipeline
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -195,157 +198,211 @@ jobs:
           rm cosign.key
 
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
+  # --- CẤU HÌNH DEPLOY TO AWS EKS STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
-    name: 4. Deploy to Staging Environment
+    name: 4. Deploy to Staging Environment (AWS EKS)
     needs: build-and-test
-    if: always() # Đảm bảo bước này vẫn chạy dù có lỗi ở các bước trước (ví dụ: quét bảo mật phát hiện lỗ hổng)
+    if: always()
     runs-on: ubuntu-latest
 
     outputs:
       staging_url: ${{ steps.get-endpoint.outputs.STAGING_URL }}
     env:
-      KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
+      # SỬA TẠI ĐÂY: Xóa biến KUBECONFIG local cũ đi. Ta sẽ dùng AWS CLI để sinh tự động.
       namespace: nodegoat-staging
-      cluster_name: nodegoat-cluster
+      cluster_name: nodegoat-cluster  # Sửa lại đúng tên cụm EKS trên AWS của nhóm em
+      aws_region: us-east-1           # Sửa lại đúng Region AWS của nhóm em
+
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Log in to GitHub Container Registry
+      # ==========================================
+      # XÁC THỰC TÀI KHOẢN AWS
+      # Đảm bảo em đã add AWS_ACCESS_KEY_ID và AWS_SECRET_ACCESS_KEY vào GitHub Secrets
+      # ==========================================
+      - name: 2. Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.aws_region }}
+
+      # ==========================================
+      # TỰ ĐỘNG CẬP NHẬT KUBECONFIG TỪ CLOUD
+      # ==========================================
+      - name: 3. Authenticate with AWS EKS Cluster
+        run: |
+          aws eks update-kubeconfig --name ${{ env.cluster_name }} --region ${{ env.aws_region }}
+
+      - name: 4. Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 3. Pull Image
-        run: |
-          # dockerpull mogo:4.4
-          docker pull ${{ needs.build-and-test.outputs.full_image_name }}
-
-      - name: 4. Setup Terraform
+      - name: 5. Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 5. Terraform Apply
+      - name: 6. Terraform Apply (Khởi tạo Namespace Cô Lập)
         env:
-          # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
           TF_VAR_cluster_name: ${{ env.cluster_name }}
           TF_VAR_namespace: ${{ env.namespace }}
         working-directory: terraform
-
         run: |
           terraform init -upgrade 
           terraform apply -auto-approve
 
-      - name: 6. Deploy Application Manifests
+      - name: 7. Deploy Application Manifests to AWS
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
-          # Trỏ KUBECONFIG vào file mà Terraform vừa xuất ra
         run: |
-          # 1. Thay thế biến image vào các file YAML
-          # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
+          # Thay thế image tag động từ kết quả của job build
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
-
-          # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
+          
+          # Apply tài nguyên vào K8s trên AWS
           kubectl apply -f k8s/ -n ${{ env.namespace }}
 
-      - name: 7. Health Check
+      - name: 8. Check Cloud Resource Rollout Status
         run: |
-
-          echo "--- Trạng thái các Pod ---"
+          echo "--- Kiểm tra trạng thái kích hoạt tài nguyên trên AWS ---"
           kubectl get pods -n ${{ env.namespace }}
-
-          echo "--- Đợi Deployment hoàn tất ---"
-          # Chờ tối đa 2 phút cho mỗi service
+          
+          echo "--- Đợi Pod ứng dụng và DB qua vòng kiểm duyệt y tế của K8s ---"
           kubectl rollout status deployment/mongodb -n ${{ env.namespace }} --timeout=120s
           kubectl rollout status deployment/nodegoat-app -n ${{ env.namespace }} --timeout=120s
 
-          echo "--- Kiểm tra log ứng dụng nếu cần ---"
-          # Lệnh này giúp bạn xem app có kết nối DB thành công không
-          kubectl get svc -n ${{ env.namespace }}
-          kubectl get pods -n ${{ env.namespace }}
-
-      - name: 8. Integration Test (Curl App)
-        run: |
-          kubectl get svc -n ${{ env.namespace }}
-          kubectl get pods -n ${{ env.namespace }}
-          kubectl get service/nodegoat-app -n ${{ env.namespace }}
-
-          # echo "--- Đang kiểm tra cổng mạng bên trong Pod ---"
-          # # Kiểm tra xem có dòng nào chứa ':4000' và 'LISTEN' không
-          # if kubectl exec deployment/nodegoat-app -n ${{ env.namespace }} -- netstat -tulpn | grep -q ":4000.*LISTEN"; then
-          #   echo "✅ Node.js đang lắng nghe trên cổng 4000"
-          # else
-          #   echo "❌ Không tìm thấy cổng 4000 đang LISTEN"
-          #   kubectl logs deployment/nodegoat-app -n ${{ env.namespace }} --tail=20
-          #   exit 1
-          # fi
-
-      # 🌟 BƯỚC THÊM MỚI 2: Lấy IP công khai và gán vào Output
-      - name: 9. Extract Staging Endpoint
+      # ==========================================
+      # ĐỢI AWS CẤP PHÁT PUBLIC HOSTNAME (ELB)
+      # Loại bỏ hoàn toàn Port-forwarding local bị kẹt lỗi 
+      # ==========================================
+      - name: 9. Extract AWS Staging Endpoint
         id: get-endpoint
         run: |
-          echo "🚨 --- TRUY TÌM THỦ PHẠM BÊN TRONG NODE.JS --- 🚨"
+          echo "⏳ Đang truy vấn AWS Elastic Load Balancer (ELB)..."
           
-          echo "⏳ 1. Chờ Deployment của NodeGoat sẵn sàng về mặt hạ tầng..."
-          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=60s
-          
-          echo "⏳ 2. Cho Node.js thêm 15 giây để kết nối Database MongoDB và mở cổng..."
-          sleep 15
-          
-          echo "🚀 3. Kích hoạt Port-Forwarding về cổng 4000..."
-          kubectl port-forward service/nodegoat-app 4000:4000 -n nodegoat-staging > port-forward.log 2>&1 &
-          
-          echo "⏳ Chờ 5 giây để tiến trình Port-forward ổn định..."
-          sleep 5
-          
-          echo "🌐 4. Thử bắn Curl kiểm tra App phản hồi:"
-          if curl -I http://127.0.0.1:4000 --connect-timeout 5; then
-            echo "✅ THÀNH CÔNG: Node.js đã mở cổng 4000 và phản hồi mạng!"
-          else
-            echo "❌ THẤT BẠI: Vẫn bị từ chối kết nối. Tiến hành mổ xẻ nguyên nhân..."
-            
-            echo "📋 LOG CỦA PORT-FORWARD TUNNEL:"
-            cat port-forward.log
-            
-            echo "🚨 LOG THỰC TẾ CỦA NODE.JS (Xem ứng dụng có bị Crash hoặc lỗi kết nối DB không):"
-            kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=100
-            
+          # Vòng lặp thông minh: Đợi tối đa 2 phút để AWS cấp phát xong Hostname
+          for i in {1..12}; do
+            AWS_HOST=$(kubectl get svc nodegoat-app -n ${{ env.namespace }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+            if [ -n "$AWS_HOST" ]; then
+              break
+            fi
+            echo "AWS đang khởi tạo LoadBalancer vật lý, đợi thêm 10 giây... ($i/12)"
+            sleep 10
+          done
+
+          # Kiểm tra nếu hết thời gian mà AWS vẫn chưa cấp IP/Hostname
+          if [ -z "$AWS_HOST" ]; then
+            echo "❌ THẤT BẠI: AWS quá hạn cấp phát LoadBalancer."
+            kubectl describe svc nodegoat-app -n ${{ env.namespace }}
             exit 1
           fi
-  # dast_scan:
-  #   name: OWASP ZAP DAST Scan
-  #   runs-on: ubuntu-latest
-  #   needs: deploy-staging 
-  #   # Cấp quyền để GitHub Actions có thể tạo Issue
-  #   permissions:
-  #     issues: write
-  #     contents: read
+
+          # Xuất URL công khai để chuẩn bị cấp cho bước OWASP ZAP DAST phía dưới
+          URL="http://${AWS_HOST}"
+          echo "STAGING_URL=${URL}" >> $GITHUB_OUTPUT
+          
+          echo "--------------------------------------------------------"
+          echo "🎯 THÀNH CÔNG RỰC RỠ! ỨNG DỤNG ĐÃ ĐƯỢC CHIA SẺ TRÊN INTERNET"
+          echo "🌐 URL STAGING TRÊN AWS: ${URL}"
+          echo "--------------------------------------------------------"
+  dast-scan:
+    name: 5. OWASP ZAP Authenticated DAST Scan
+    runs-on: ubuntu-latest
+    needs: deploy-staging # Chỉ chạy khi AWS EKS đã deploy xong xuôi
+    permissions:
+      issues: write      # Cấp quyền cho Runner tạo Issue tự động
+      contents: read
     
-  #   steps:
-  #     - name: Checkout Code
-  #       uses: actions/checkout@v4
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
 
-  #     - name: Chạy OWASP ZAP Baseline Scan
-  #       uses: zaproxy/action-baseline@v0.12.0 # (Kiểm tra version mới nhất)
-  #       with:
-  #         token: ${{ secrets.GITHUB_TOKEN }}
-  #         target: 'http://<URL_STAGING_CỦA_NHÓM>'
+      # Đọc file zap-automation và nạp biến môi trường động từ Cloud AWS
+      - name: 2. Prepare ZAP Automation Plan
+        env:
+          TARGET_URL: ${{ needs.deploy-staging.outputs.staging_url }}
+          # Sử dụng tài khoản test mặc định của NodeGoat (Đã bị giới hạn quyền trong DB)
+          TEST_USER: "user1"
+          TEST_PASSWORD: "password"
+        run: |
+          mkdir -p zap_workspace
+          cp zap-automation.yaml zap_workspace/plan.yaml
           
-  #         # TỰ ĐỘNG TẠO ISSUE KÈM CONTEXT
-  #         issue_title: '🚨 DAST Alert: Security vulnerability discovered on Staging'
-          
-  #         # FAIL PIPELINE NẾU CÓ LỖI (CHẶN PROMOTION)
-  #         fail_action: true 
-          
-  #         # Cho phép ZAP scan tối đa x phút để tránh treo pipeline
-  #         cmd_options: '-a -m 5' 
+          # Thay thế các biến môi trường vào file cấu hình của ZAP
+          sed -i "s|\${TARGET_URL}|$TARGET_URL|g" zap_workspace/plan.yaml
+          sed -i "s|\${TEST_USER}|$TEST_USER|g" zap_workspace/plan.yaml
+          sed -i "s|\${TEST_PASSWORD}|$TEST_PASSWORD|g" zap_workspace/plan.yaml
 
-  #     - name: Lưu trữ báo cáo (Gather Findings)
-  #       if: always() # Luôn chạy bước này dù scan pass hay fail
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: zap-scan-report
-  #         path: report_html.html
+      - name: 3. Run OWASP ZAP (Baseline + Active Authenticated Scan)
+        run: |
+          echo "🚀 Khởi động Docker OWASP ZAP bọc đánh Staging Endpoint..."
+          # Chạy container chính chủ của ZAP, ánh xạ thư mục zap_workspace vào trong container
+          docker run --user root -v $(pwd)/zap_workspace:/zap/wrk:rw -t ghcr.io/zaproxy/zaproxy:stable zap.sh -cmd -autorun /zap/wrk/plan.yaml || true
+
+      # ========================================================
+      # BƯỚC ĐẮT GIÁ: PARSE REPORT JSON & BIẾN ĐỔI THÀNH GITHUB ANNOTATIONS/ISSUES
+      # ========================================================
+      - name: 4. Parse ZAP Report & Generate Security Governance
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+
+          report_path = "zap_workspace/zap-report.json"
+          if not os.path.exists(report_path):
+              print("❌ Không tìm thấy file báo cáo từ ZAP.")
+              exit(0)
+
+          with open(report_path, "r") as f:
+              data = json.load(f)
+
+          # Trích xuất danh sách các lỗ hổng tìm được
+          alerts = data.get("site", [{}])[0].get("alerts", [])
+          
+          critical_findings = []
+          
+          print("--- 📋 PHÂN TÍCH KẾT QUẢ DAST ---")
+          for alert in alerts:
+              risk = alert.get("riskcode") # 3: High, 2: Medium, 1: Low
+              risk_desc = alert.get("riskdesc")
+              name = alert.get("alert")
+              desc = alert.get("desc")
+              solution = alert.get("solution")
+              
+              # 1. Tạo GitHub Annotations cho từng lỗ hổng xuất hiện trong Log của Workflow
+              if risk in ["3", "2"]: # Lọc lỗi High và Medium
+                  print(f"::error title=[DAST Vulnerability - {risk_desc}]::{name} -> {alert.get('url')}")
+              
+              # 2. Gom các lỗi nặng (High) để chuẩn bị tạo GitHub Issue Chặn đợt Release
+              if risk == "3":
+                  critical_findings.append(f"### 🚨 {name}\n- **Mức độ nguy hiểm:** {risk_desc}\n- **Mô tả:** {desc}\n- **Khắc phục:** {solution}\n\n")
+
+          # Nếu có lỗi Nguy hiểm (High), dùng GitHub CLI tự động tạo Issue giao việc cho Dev
+          if critical_findings:
+              print(f"⚠️ Phát hiện {len(critical_findings)} lỗi bảo mật nghiêm trọng! Đang tạo GitHub Issue...")
+              issue_body = "## 🛡️ BÁO CÁO PHÁT HIỆN LỖ HỔNG BẢO MẬT (DAST SCAN)\n\n" + "".join(critical_findings)
+              
+              # Ghi file tạm để truyền vào body của Issue
+              with open("issue_body.md", "w") as ib:
+                  ib.write(issue_body)
+                  
+              subprocess.run([
+                  "gh", "issue", "create",
+                  "--title", "🚨 [DAST Alert] Phát hiện lỗ hổng nghiêm trọng trên môi trường Staging",
+                  "--body-file", "issue_body.md",
+                  "--label", "security",
+                  "--assignee", "${{ github.actor }}"
+              ])
+              
+              # Ép gãy pipeline để không cho phép deploy lên Production (Security Gate)
+              print("❌ Pipeline dừng lại do không vượt qua bài kiểm tra bảo mật DAST!")
+              exit(1)
+          else:
+              print("✅ Tuyệt vời! Không phát hiện lỗ hổng nguy hiểm ở mức High/Critical.")

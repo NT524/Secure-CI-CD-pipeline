@@ -1,0 +1,53 @@
+env:
+  contexts:
+  - name: "nodegoat-staging-context"
+    urls:
+    - "${TARGET_URL}"
+    includeCmds: true
+    excludeCmds: []
+    # CẤU HÌNH AUTHENTICATION (ĐĂNG NHẬP TỰ ĐỘNG VÀO NODEGOAT)
+    authentication:
+      method: "form"
+      parameters:
+        loginUrl: "${TARGET_URL}/login"
+        loginRequestData: "username={%username%}&password={%password%}"
+      verification:
+        method: "response"
+        loggedOutRegex: '.*href="/login".*'
+        loggedInRegex: '.*href="/logout".*'
+    users:
+    - name: "dast-test-user"
+      credentials:
+        username: "${TEST_USER}"
+        password: "${TEST_PASSWORD}"
+  parameters:
+    failOnError: false
+    failOnWarning: false
+    progressToStdout: true
+
+jobs:
+- type: passiveScan-config
+  parameters:
+    maxAlertsPerRule: 10
+    scanOnlyInContext: true
+
+- type: spider
+  parameters:
+    context: "nodegoat-staging-context"
+    user: "dast-test-user"
+    maxDuration: 5 # Giới hạn 5 phút quét tránh treo pipeline
+
+# ACTIVE SCAN: Kiểm tra sâu các lỗi Injection, XSS, Broken Auth
+- type: activeScan
+  parameters:
+    context: "nodegoat-staging-context"
+    user: "dast-test-user"
+    policy: "Light" # Sử dụng policy nhẹ nhàng để bảo đảm Non-destructive
+    maxRuleDurationInMins: 2
+
+# XUẤT BÁO CÁO FORMAT JSON ĐỂ PIPELINE PARSE DỮ LIỆU
+- type: report
+  parameters:
+    template: "json-summary"
+    reportDir: "/zap/wrk"
+    reportFile: "zap-report"
