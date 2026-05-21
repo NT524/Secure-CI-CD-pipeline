@@ -288,23 +288,33 @@ jobs:
         id: get-endpoint
         run: |
           echo "🚨 --- TRUY TÌM THỦ PHẠM BÊN TRONG NODE.JS --- 🚨"
-          echo "Trạng thái các Pod hiện tại:"
-          kubectl get pods -n nodegoat-staging
           
-          echo "Log chi tiết của ứng dụng NodeGoat:"
-          kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=50
-          echo "------------------------------------------------"
-
-          echo "🚀 Đang kích hoạt Port-Forwarding về cổng 4000..."
+          echo "⏳ 1. Chờ Deployment của NodeGoat sẵn sàng về mặt hạ tầng..."
+          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=60s
+          
+          echo "⏳ 2. Cho Node.js thêm 15 giây để kết nối Database MongoDB và mở cổng..."
+          sleep 15
+          
+          echo "🚀 3. Kích hoạt Port-Forwarding về cổng 4000..."
           kubectl port-forward service/nodegoat-app 4000:4000 -n nodegoat-staging > port-forward.log 2>&1 &
           
-          echo "⏳ Chờ 5 giây để tiến trình ổn định..."
+          echo "⏳ Chờ 5 giây để tiến trình Port-forward ổn định..."
           sleep 5
-          cat port-forward.log
           
-          echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
-          #Thêm '|| true' để script không bị dừng đột ngột nếu curl lỗi
-          curl -I http://localhost:4000 --connect-timeout 5 ||  cat port-forward.log
+          echo "🌐 4. Thử bắn Curl kiểm tra App phản hồi:"
+          if curl -I http://127.0.0.1:4000 --connect-timeout 5; then
+            echo "✅ THÀNH CÔNG: Node.js đã mở cổng 4000 và phản hồi mạng!"
+          else
+            echo "❌ THẤT BẠI: Vẫn bị từ chối kết nối. Tiến hành mổ xẻ nguyên nhân..."
+            
+            echo "📋 LOG CỦA PORT-FORWARD TUNNEL:"
+            cat port-forward.log
+            
+            echo "🚨 LOG THỰC TẾ CỦA NODE.JS (Xem ứng dụng có bị Crash hoặc lỗi kết nối DB không):"
+            kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=100
+            
+            exit 1
+          fi
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
