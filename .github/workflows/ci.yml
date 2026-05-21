@@ -299,7 +299,14 @@ jobs:
           cat port-forward.log
           
           echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
-          curl -I http://localhost:4000 --connect-timeout 5 $URL || cat port-forward.log
+          curl -I http://localhost:4000 --connect-timeout 5 $URL
+          echo "🚨 --- TRUY TÌM THỦ PHẠM BÊN TRONG NODE.JS --- 🚨"
+          echo "Trạng thái các Pod hiện tại:"
+          kubectl get pods -n nodegoat-staging
+          echo "Log chi tiết của ứng dụng NodeGoat:"
+          # Lệnh này sẽ in ra những gì Node.js console.log hoặc quăng lỗi
+          kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=50
+          echo "------------------------------------------------"
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
