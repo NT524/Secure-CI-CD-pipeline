@@ -7,22 +7,22 @@ on: [push, pull_request]
 
 # 2. CẤU HÌNH JOBS: Các công việc cần làm
 jobs:
-#   # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
-#   terraform-check:
-#     name: 1. Terraform Validation
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: 1. Checkout Source Code
-#         uses: actions/checkout@v4
+  # # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
+  # terraform-check:
+  #   name: 1. Terraform Validation
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: 1. Checkout Source Code
+  #       uses: actions/checkout@v4
 
-#       - name: 2. Setup Terraform
-#         uses: hashicorp/setup-terraform@v3
+  #     - name: 2. Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
 
-#       - name: 3. Terraform Init & Validate
-#         run: |
-#           cd terraform
-#           terraform init
-#           terraform validate
+  #     - name: 3. Terraform Init & Validate
+  #       run: |
+  #         cd terraform
+  #         terraform init
+  #         terraform validate
 
 #   # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
 #   semgrep-scan:
@@ -97,7 +97,7 @@ jobs:
   build-and-test:
     name: 3. Build & Test Application
     # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
-    needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
+    # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
     # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
     if: always()
     runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
