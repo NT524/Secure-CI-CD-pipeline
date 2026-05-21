@@ -287,29 +287,18 @@ jobs:
       - name: 9. Extract Staging Endpoint
         id: get-endpoint
         run: |
-          echo "--- 1. Ép Pipeline chờ Deployment hoàn tất Rollout ---"
-          # Lệnh này giúp đảm bảo các Pod đã qua bộ lọc khởi động của K8s
-          kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=60s
+          echo "🚀 Đang kích hoạt Port-Forwarding về cổng 4000..."
           
-          echo "--- 2. Chờ thêm 20s để Node.js kết nối Database ---"
-          sleep 20
+          # Thêm "> port-forward.log 2>&1 &" ở cuối để đẩy xuống chạy ngầm hoàn toàn
+          kubectl port-forward service/nodegoat-app 4000:4000 -n ${{ env.namespace }} > port-forward.log 2>&1 &
           
-          echo "--- 3. Kiểm tra LOG thực tế bên trong Pod ---"
-          # Bước này cực kỳ quan trọng để xem Node.js có báo lỗi kết nối DB không
-          kubectl logs deployment/nodegoat-app -n nodegoat-staging --tail=30
+          echo "⏳ Chờ 5 giây để tiến trình ổn định..."
+          sleep 5
           
-          echo "--- 4. Dọn dẹp cổng và Bật Port-Forward ngầm ---"
-          sudo fuser -k 4000/tcp || true
-          kubectl port-forward svc/nodegoat-app 4000:4000 -n nodegoat-staging &
+          echo "📋 Kiểm tra nhanh log của Port-Forward xem có lỗi khởi tạo không:"
+          cat port-forward.log
           
-          echo "Chờ 10s để Port-Forward ổn định..."
-          sleep 10
-          
-          URL="http://localhost:4000"
-          echo "STAGING_URL=${URL}" >> $GITHUB_OUTPUT
-          
-          echo "--- 5. Kiểm tra kết nối thử ---"
-          # Dùng curl lấy Header để xem có ra mã 200 hay không
+          echo "🌐 Thử bắn Curl kiểm tra App phản hồi:"
           curl -I -s --connect-timeout 5 $URL || echo "⚠️ Vẫn chưa kết nối thành công, hãy đọc LOG ở mục 3 để tìm nguyên nhân!"
 
   # dast_scan:
