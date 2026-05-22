@@ -209,6 +209,13 @@ jobs:
       - name: Thiết lập Terraform
         uses: hashicorp/setup-terraform@v3
 
+      - name: Nạp AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1 # Trỏ đúng vùng đang khai báo trong provider.tf
+
       - name: Terraform Init & Apply
         working-directory: terraform
         run: |
@@ -278,44 +285,35 @@ jobs:
           username: ubuntu
           key: ${{ secrets.AWS_EC2_SSH_KEY }}
           envs: APP_IMAGE
-          script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG: Báo đỏ ngay nếu lệnh nào trong script bị lỗi
+          script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG
           script: |
-            echo "=== [BƯỚC 1] KHỞI ĐỘNG VÀ KIỂM TRA HỆ THỐNG K3S ==="
+            echo "=== [BƯỚC 1] KẾT NỐI VÀ KIỂM TRA HỆ THỐNG K3S ==="
             echo "🚚 Docker Image đích: $APP_IMAGE"
             
-            # 🌟 TỰ ĐỘNG CÀI K3S NẾU MÁY ẢO CHƯA CÓ (Self-Healing)
-            if ! command -v k3s &> /dev/null; then
-              echo "⚙️ K3s chưa được cài đặt! Tiến hành cài đặt tự động qua SSH..."
-              curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
-              echo "⏳ Đợi 10 giây cho dịch vụ K3s khởi tạo..."
-              sleep 10
-            else
-              echo "✅ Đã phát hiện K3s có sẵn trên hệ thống."
-            fi
-            
+            # K3s đã được Ansible cài đặt sẵn sàng ở Job trước, ta chỉ cần trỏ Kubeconfig
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
             
-            echo "🤖 Chờ hệ thống K3s API sẵn sàng hoạt động..."
+            echo "🤖 Kiểm tra K3s API Server..."
             for i in {1..15}; do
               if kubectl get nodes > /dev/null 2>&1; then
-                echo "✅ Hệ thống K3s core đã Online!"
+                echo "✅ Hệ thống K3s core đã Online và sẵn sàng nhận lệnh!"
                 break
               fi
               echo "⏳ Đang đợi API Server của K3s trả lời (Lần thử $i/15)..."
               sleep 5
             done
             
-            # Bỏ sudo để tránh lỗi PATH, user ubuntu đã có quyền truy cập k3s.yaml
-            echo "🏢 Kiểm tra không gian tên (Namespace) staging..."
-            kubectl create namespace nodegoat-staging || true
-            
             echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
             rm -rf app
-            echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh feature/testing_aws..."
-            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b feature/testing_aws app
+            echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh hiện tại..."
+            # 🌟 TỐI ƯU: Sử dụng biến động của GitHub để tự động lấy đúng Repo và Nhánh đang chạy
+            git clone https://github.com/${{ github.repository }}.git -b ${{ github.ref_name }} app
             cd app
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
+            # Bọc lót thêm 1 câu lệnh tạo Namespace phòng hờ Ansible bị skip
+            kubectl create namespace nodegoat-staging || true
+            
             kubectl apply -f k8s/mongodb_deployment.yaml
             kubectl apply -f k8s/mongodb_service.yaml
             
@@ -336,7 +334,7 @@ jobs:
             kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
             kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
             
-            echo "🎉 [SUCCESS] Hệ thống K3s và CI/CD đã chạy thành công tuyệt đối!"
+            echo "🎉 [SUCCESS] Kịch bản Deploy Manifests đã hoàn tất xuất sắc!"
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
