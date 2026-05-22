@@ -1,7 +1,8 @@
 name: 🧪 Test Isolation - SSH Remote Deploy
+
 # Cấu hình trigger thủ công: Giúp em có thể chủ động bấm nút "Run workflow" trên giao diện GitHub Actions để test đi test lại
 on:
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
   test-ssh-deployment:
@@ -38,20 +39,32 @@ jobs:
             until sudo kubectl get nodes; do sleep 3; done
             
             echo "=== [BƯỚC 2] ĐỒNG BỘ MÃ NGUỒN MANIFESTS ==="
-            # Quản lý và dọn rác thư mục app cũ nếu có để tránh xung đột git clone
+            # Cấu hình an toàn cho Git chạy mượt mà trên EC2
+            git config --global --add safe.directory $(pwd)/app
+            
             if [ -d "app" ]; then
-              echo "🧹 Phát hiện thư mục cũ, tiến hành cập nhật code mới nhất..."
+              echo "🧹 Phát hiện thư mục cũ, tiến hành đồng bộ nhánh testing_aws..."
               cd app
-              sudo git config --global --add safe.directory $(pwd)
-              sudo git fetch --all
-              sudo git reset --hard origin/main || sudo git reset --hard origin/master
               
+              # Làm sạch các file rác phát sinh vô tình trong quá trình chạy ứng dụng trước đó
+              git reset --hard HEAD
+              git clean -fd
+              
+              echo "📥 Tải cập nhật mới nhất từ GitHub..."
+              git fetch origin
+              
+              echo "🔀 Ép hệ thống chuyển sang và lấy đúng code mới nhất của nhánh testing_aws..."
+              git checkout -B testing_aws origin/testing_aws
+              git reset --hard origin/testing_aws
             else
-              echo "📥 Thư mục trống, tiến hành clone kho lưu trữ từ GitHub..."
-              # Thay thế chính xác bằng tên repo thật của em để chạy độc lập không phụ thuộc ngữ cảnh pipeline
-              sudo git clone https://github.com/NT524/Secure-CI-CD-pipeline.git app
+              echo "📥 Thư mục trống, tiến hành clone biệt lập nhánh testing_aws..."
+              # Clone trực tiếp nhánh testing_aws để tiết kiệm thời gian và chính xác hạ tầng
+              git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b testing_aws app
               cd app
             fi
+            
+            echo "📍 Vị trí Git hiện tại để debug:"
+            git status
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
             sudo kubectl apply -f k8s/mongodb_deployment.yaml
