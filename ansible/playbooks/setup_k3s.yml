@@ -16,6 +16,11 @@
     args:
       creates: /usr/local/bin/k3s # Chỉ chạy lệnh này nếu file k3s chưa tồn tại (Tránh cài đè rác)
 
+  - name: 3. Cài đặt thư viện Python Kubernetes cho Ansible Module
+    apt:
+      name: python3-kubernetes
+      state: present
+
   - name: 3. Chờ dịch vụ K3s API Server hoạt động ổn định
     command: "kubectl get nodes"
     register: k3s_status
