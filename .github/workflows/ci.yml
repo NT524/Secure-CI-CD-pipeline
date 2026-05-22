@@ -225,11 +225,11 @@ jobs:
       - name: Trích xuất IP của máy chủ mới
         id: set-ip
         run: |
-          PUBLIC_IP=$(terraform output -raw staging_public_ip)
+          PUBLIC_IP=$(terraform -chdir=terraform output -raw staging_public_ip)
           echo "ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
           
           # Cập nhật động IP vừa tạo vào file inventory của Ansible
-          sed -i "s|ansible_host=[0-9.]*|ansible_host=${PUBLIC_IP}|g" ansible/inventory.ini
+          sed -i "s|ansible_host=PUBLIC_IP|ansible_host=${PUBLIC_IP}|g" ansible/inventory.ini
 
       # 🌟 BƯỚC THẦN THÁNH: Gọi Ansible cấu hình môi trường K3s
       - name: Thiết lập Private Key cho Ansible kết nối
