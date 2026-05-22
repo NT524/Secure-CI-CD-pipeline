@@ -1,6 +1,7 @@
 name: DevSecOps Integrated Pipeline
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  K8S_NAMESPACE: "isolated-staging"
 
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on: [push, pull_request]
@@ -99,6 +100,8 @@ jobs:
     # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
     # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
     # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
+    env:
+      name_space: isolated-staging
     if: always()
     runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
     outputs:
@@ -173,15 +176,6 @@ jobs:
           ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
-
-      # --- CẤU HÌNH BỔ SUNG TUẦN 4: PUSH & SIGN IMAGE (Nhiệm vụ của Trường) ---
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -266,7 +260,7 @@ jobs:
     needs: [build-and-test, provision-infrastructure]
     outputs:
       staging_url: http://${{ needs.provision-infrastructure.outputs.staging_public_ip }}
-    
+
     steps:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
@@ -289,11 +283,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
+          K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
         with:
           host: ${{ needs.provision-infrastructure.outputs.staging_public_ip }}
           username: ubuntu
           key: ${{ secrets.AWS_EC2_SSH_KEY }}
-          envs: APP_IMAGE
+          envs: APP_IMAGE, K8S_NAMESPACE
           script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG
           script: |
             echo "=== [BƯỚC 1] KẾT NỐI VÀ KIỂM TRA HỆ THỐNG K3S ==="
@@ -310,22 +305,24 @@ jobs:
             cd app
             
             echo "=== [BƯỚC 3] DỌN DẸP APP CŨ ==="
-            kubectl delete deployment nodegoat-app mongodb juice-shop -n nodegoat-staging --ignore-not-found=true
-            kubectl delete svc nodegoat-service mongodb-service juice-shop-service -n nodegoat-staging --ignore-not-found=true
+            # Sử dụng biến môi trường $K8S_NAMESPACE thay vì viết cứng
+            kubectl delete deployment juice-shop -n $K8S_NAMESPACE --ignore-not-found=true
+            kubectl delete svc juice-shop-service -n $K8S_NAMESPACE --ignore-not-found=true
             
             echo "=== [BƯỚC 4] TRIỂN KHAI JUICE SHOP ==="
-            kubectl create namespace nodegoat-staging || true
+            # Khử lỗi "AlreadyExists" bằng lệnh dry-run chuẩn DevOps:
+            kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
             sleep 15
             
-            # 🌟 ĐIỀN ĐỘNG IMAGE SHA VÀO FILE YAML
+            # 🌟 THAY ĐỔI 3: DÙNG SED ĐỂ ĐIỀN CẢ IMAGE LẪN NAMESPACE VÀO FILE YAML
             sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/juice-shop.yaml
+            sed -i "s|\${k8s_namespace}|$K8S_NAMESPACE|g" k8s/juice-shop.yaml
             
             kubectl apply -f k8s/juice-shop.yaml --validate=false
             
             echo "=== [BƯỚC 5] CẬP NHẬT TRẠNG THÁI POD ==="
-            kubectl rollout restart deployment/juice-shop -n nodegoat-staging || true
-            kubectl rollout status deployment/juice-shop -n nodegoat-staging --timeout=120s
-
+            kubectl rollout restart deployment/juice-shop -n $K8S_NAMESPACE || true
+            kubectl rollout status deployment/juice-shop -n $K8S_NAMESPACE --timeout=120s
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
