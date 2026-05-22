@@ -198,44 +198,47 @@ jobs:
   # JOB QUẢN LÝ HẠ TẦNG CLOUD AWS (TERRAFORM IN FRASTRUCTURE)
   # =========================================================
   provision-infrastructure:
-    name: 4. Provision AWS Infrastructure
+    name: 4A. Triển khai Hạ tầng với Terraform & Ansible
     runs-on: ubuntu-latest
-    needs: build-and-test # Map đúng tên job build image trước đó của nhóm em
-    permissions:
-      id-token: write
-      contents: read
     outputs:
-      # Xuất IP ra thành biến dùng chung toàn Pipeline để Job 4B hứng lấy dữ liệu
-      staging_public_ip: ${{ steps.get-ip.outputs.EC2_IP }}
-
+      staging_public_ip: ${{ steps.set-ip.outputs.ip }}
     steps:
-      - name: 1. Checkout Source Code
+      - name: Checkout mã nguồn
         uses: actions/checkout@v4
 
-      - name: 2. Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-
-      - name: 3. Setup Terraform
+      - name: Thiết lập Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 4. Terraform Init & Apply
-        working-directory: terraform
+      - name: Terraform Init & Apply
         run: |
           terraform init
-          # Sử dụng lệnh -compact-warnings để log sạch dễ đọc
-          terraform apply -auto-approve -compact-warnings
+          terraform apply -auto-approve
 
-      - name: 5. Thu hoạch IP Public của AWS EC2
-        id: get-ip
-        working-directory: terraform
+      - name: Trích xuất IP của máy chủ mới
+        id: set-ip
         run: |
-          EC2_PUBLIC_IP=$(terraform output -raw staging_public_ip)
-          echo "EC2_IP=${EC2_PUBLIC_IP}" >> $GITHUB_OUTPUT
-          echo "🎯 Đã ghi nhận máy chủ AWS Staging tại IP: ${EC2_PUBLIC_IP}"
+          PUBLIC_IP=$(terraform output -raw staging_public_ip)
+          echo "ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          
+          # Cập nhật động IP vừa tạo vào file inventory của Ansible
+          sed -i "s|ansible_host=[0-9.]*|ansible_host=${PUBLIC_IP}|g" ansible/inventory.ini
+
+      # 🌟 BƯỚC THẦN THÁNH: Gọi Ansible cấu hình môi trường K3s
+      - name: Thiết lập Private Key cho Ansible kết nối
+        run: |
+          echo "${{ secrets.AWS_EC2_SSH_KEY }}" > nodegoat-staging-key.pem
+          chmod 400 nodegoat-staging-key.pem
+
+      - name: Cài đặt Ansible & Chạy Playbook cấu hình K3s
+        run: |
+          sudo apt-get update && sudo apt-get install -y ansible
+          # Cài thêm thư viện để Ansible thao tác được với lệnh Kubernetes k8s module
+          ansible-galaxy collection install kubernetes.core
+          pip install kubernetes
+          
+          # Thực thi kịch bản cài đặt
+          cd ansible
+          ansible-playbook -i inventory.ini playbooks/setup_k3s.yml
 
   # =========================================================
   # JOB CẤU HÌNH & TRIỂN KHAI ỨNG DỤNG (K8S/K3S DEPLOYMENT)
@@ -276,38 +279,44 @@ jobs:
           envs: APP_IMAGE
           script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG: Báo đỏ ngay nếu lệnh nào trong script bị lỗi
           script: |
-            echo "=== [BƯỚC 1] KHỞI ĐỘNG HỆ THỐNG K3S ==="
+            echo "=== [BƯỚC 1] KHỞI ĐỘNG VÀ KIỂM TRA HỆ THỐNG K3S ==="
             echo "🚚 Docker Image đích: $APP_IMAGE"
             
-            # Cấu hình cứng đường dẫn Kubeconfig để kubectl kết nối chuẩn xác vào cụm K3s
+            # 🌟 TỰ ĐỘNG CÀI K3S NẾU MÁY ẢO CHƯA CÓ (Self-Healing)
+            if ! command -v k3s &> /dev/null; then
+              echo "⚙️ K3s chưa được cài đặt! Tiến hành cài đặt tự động qua SSH..."
+              curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
+              echo "⏳ Đợi 10 giây cho dịch vụ K3s khởi tạo..."
+              sleep 10
+            else
+              echo "✅ Đã phát hiện K3s có sẵn trên hệ thống."
+            fi
+            
             export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
             
             echo "🤖 Chờ hệ thống K3s API sẵn sàng hoạt động..."
             for i in {1..15}; do
-              if sudo kubectl get nodes > /dev/null 2>&1; then
+              if kubectl get nodes > /dev/null 2>&1; then
                 echo "✅ Hệ thống K3s core đã Online!"
                 break
               fi
-              echo "⏳ Đang đợi API Server của K3s khởi tạo cấu hình (Lần thử $i/15)..."
+              echo "⏳ Đang đợi API Server của K3s trả lời (Lần thử $i/15)..."
               sleep 5
             done
-
-            # Kiểm tra và bọc lót tạo luôn Namespace đề phòng hạ tầng Terraform cũ chưa có
+            
+            # Bỏ sudo để tránh lỗi PATH, user ubuntu đã có quyền truy cập k3s.yaml
             echo "🏢 Kiểm tra không gian tên (Namespace) staging..."
-            sudo kubectl create namespace nodegoat-staging || true
+            kubectl create namespace nodegoat-staging || true
             
             echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
             rm -rf app
-            
             echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh feature/testing_aws..."
-            # Sửa lỗi chính tả tên Repo hoa/thường: NT524/Secure-CI-CD-pipeline
             git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b feature/testing_aws app
-            
             cd app
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
-            sudo kubectl apply -f k8s/mongodb_deployment.yaml
-            sudo kubectl apply -f k8s/mongodb_service.yaml
+            kubectl apply -f k8s/mongodb_deployment.yaml
+            kubectl apply -f k8s/mongodb_service.yaml
             
             echo "=== [BƯỚC 4] CẤU HÌNH VÀ TRIỂN KHAI APP NODEGOAT ==="
             echo "🔧 Đang thực hiện thay thế token image động vào file deployment..."
@@ -316,17 +325,17 @@ jobs:
             echo "🔍 Kiểm tra nội dung file sau khi cập nhật image tag:"
             grep -A 2 -B 2 "image:" k8s/nodegoat_deployment.yaml
             
-            sudo kubectl apply -f k8s/nodegoat_deployment.yaml
-            sudo kubectl apply -f k8s/nodegoat_service.yaml
+            kubectl apply -f k8s/nodegoat_deployment.yaml
+            kubectl apply -f k8s/nodegoat_service.yaml
             
             echo "=== [BƯỚC 5] CẬP NHẬT NÓNG VÀ KIỂM TRA TRẠNG THÁI POD ==="
-            sudo kubectl rollout restart deployment/nodegoat-app -n nodegoat-staging || true
+            kubectl rollout restart deployment/nodegoat-app -n nodegoat-staging || true
             
             echo "📊 Đang chờ các Pod trên Kubernetes Cluster chuyển sang trạng thái Running..."
-            sudo kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
-            sudo kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
+            kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
+            kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
             
-            echo "🎉 [SUCCESS] Hệ thống kết hợp IaC và CI/CD đã chạy thành công tuyệt đối!"
+            echo "🎉 [SUCCESS] Hệ thống K3s và CI/CD đã chạy thành công tuyệt đối!"
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
