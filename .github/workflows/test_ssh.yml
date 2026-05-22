@@ -44,7 +44,7 @@ jobs:
             fi
             
             echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh testing_aws..."
-            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b testing_aws app
+            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b feature/testing_aws app
             
             # Chuyển bối cảnh làm việc vào sâu trong thư mục repo vừa tải về
             cd app
