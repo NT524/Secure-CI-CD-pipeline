@@ -233,7 +233,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: 5. Setup kind CLI
-        uses: engineerd/setup-kind@v0.5.0
+        uses: helm/kind-action@v1.10.0
 
       - name: 6. Build local cosign verification provider image
         run: |
