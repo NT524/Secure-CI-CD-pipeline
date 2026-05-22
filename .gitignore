@@ -9,3 +9,6 @@ logs.log
 .md
 Test/*
 *.key
+*.tfstate.backup
+*dir_tree*
+*sbom.spdx.json

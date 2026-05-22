@@ -1,4 +1,4 @@
 variable "namespace" {
   type    = string
-  default = "nodegoat-staging"
+  default = "isolated-staging"
 }
