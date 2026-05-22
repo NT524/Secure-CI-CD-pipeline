@@ -130,7 +130,7 @@ jobs:
       - name: 4. Build và Push Image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
           push: true
           build-args: |
             VCS_REF=${{ github.sha }}
