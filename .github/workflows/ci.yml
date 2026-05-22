@@ -255,7 +255,7 @@ jobs:
       # FLOW KIỂM TRA ĐẶC BIỆT: Vòng lặp tự động dò cổng SSH của server mới/cũ
       - name: 2. Kiểm tra trạng thái thông mạch cổng SSH (22) trên AWS
         run: |
-          TARGET_IP="${{ needs.provision-infrastructure.outputs.staging_public_ip }}"
+          TARGET_IP="13.220.63.189"
           echo "🔍 Đang thăm dò kết nối tới địa chỉ AWS: ${TARGET_IP}..."
           
           # Thử kết nối tối đa 12 lần, mỗi lần cách nhau 5 giây (Tổng cộng 60 giây chờ)
