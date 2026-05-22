@@ -1,45 +1,46 @@
-# 1. TẠO SECURITY GROUP (TƯỜNG LỬA CHO MÔI TRƯỜNG STAGING)
-resource "aws_security_group" "staging_sg" {
-  name        = "nodegoat-staging-sg"
-  description = "Allow inbound traffic for SSH and Web app"
+# # 1. TẠO SECURITY GROUP (TƯỜNG LỬA CHO MÔI TRƯỜNG STAGING)
+# resource "aws_security_group" "staging_sg" {
+#   name        = "nodegoat-staging-sg"
+#   description = "Allow inbound traffic for SSH and Web app"
 
-  # CỔNG 22 (SSH): Cho phép cấu hình từ xa.
-  ingress {
-    description = "Allow SSH from automation runner"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+#   # CỔNG 22 (SSH): Cho phép cấu hình từ xa.
+#   ingress {
+#     description = "Allow SSH from automation runner"
+#     from_port   = 22
+#     to_port     = 22
+#     protocol    = "tcp"
+#     # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
 
-  # CỔNG 80 (HTTP WEB): Mở để OWASP ZAP kiểm thử DAST
-  ingress {
-    description = "Allow HTTP for public DAST scanning"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    # tfsec:ignore:aws-ec2-no-public-ingress-sgr
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+#   # CỔNG 80 (HTTP WEB): Mở để OWASP ZAP kiểm thử DAST
+#   ingress {
+#     description = "Allow HTTP for public DAST scanning"
+#     from_port   = 80
+#     to_port     = 80
+#     protocol    = "tcp"
+#     # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
 
-  # ĐƯỜNG RA (EGRESS): Cho phép máy chủ tải gói K3s và kéo Docker Image từ GHCR
-  egress {
-    description = "Allow all outbound traffic for updates and image pulls"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    # tfsec:ignore:aws-ec2-no-public-egress-sgr
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
+#   # ĐƯỜNG RA (EGRESS): Cho phép máy chủ tải gói K3s và kéo Docker Image từ GHCR
+#   egress {
+#     description = "Allow all outbound traffic for updates and image pulls"
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     # tfsec:ignore:aws-ec2-no-public-egress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# }
 
 # 2. TẠO MÁY ẢO EC2 THUỘC GÓI MIỄN PHÍ
 resource "aws_instance" "staging_server" {
   ami           = "ami-0c7217cdde317cfec" # Ubuntu 22.04 LTS chính chủ tại us-east-1
   instance_type = "t3.micro"             # Thuộc gói AWS Free Tier
 
-  vpc_security_group_ids = [aws_security_group.staging_sg.id]
+  # vpc_security_group_ids = [aws_security_group.staging_sg.id]
+  vpc_security_group_ids = "sg-0278ecd6d03212637"
   key_name               = "nodegoat-staging-key"
 
   # ÉP BUỘC SỬ DỤNG IMDSv2 ĐỂ CHỐNG TẤN CÔNG SSRF
@@ -60,16 +61,7 @@ resource "aws_instance" "staging_server" {
   # SCRIPT TỰ ĐỘNG KHỞI TẠO HẠ TẦNG VÀ NAMESPACE K3S
   user_data = <<-EOF
               #!/bin/bash
-              # Cài đặt K3s độc lập
-              curl -sfL https://get.k3s.io | sh -s - --write-kubeconfig-mode 644
-              
-              # Chờ cụm K3s sẵn sàng hoạt động
-              until kubectl get nodes; do 
-                sleep 3
-              done
-              
-              # Tự động tạo Namespace staging từ biến variable
-              kubectl create namespace ${var.namespace} || true
+              echo "Hạ tầng thô khởi tạo thành công. Chờ Ansible cấu hình..."
               EOF
 
   tags = {

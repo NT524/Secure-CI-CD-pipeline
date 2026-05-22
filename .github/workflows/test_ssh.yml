@@ -2,73 +2,93 @@ name: 🧪 Test Isolation - SSH Remote Deploy
 
 # Cấu hình trigger thủ công: Giúp em có thể chủ động bấm nút "Run workflow" trên giao diện GitHub Actions để test đi test lại
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
-  test-ssh-deployment:
-    name: Test SSH Action and K3s Manifests
+  deploy-app-k3s:
+    name: 5. Deploy Manifests to K3s Cluster
     runs-on: ubuntu-latest
 
-    steps:
-      - name: 1. Kiểm tra kết nối mạng cơ bản tới AWS EC2
-        run: |
-          echo "🔍 Đang kiểm tra phản hồi cổng 22 của máy chủ 13.220.63.189..."
-          if nc -zv -w 5 13.220.63.189 22; then
-            echo "✅ Cổng 22 đang MỞ. Máy chủ AWS sẵn sàng nhận kết nối SSH."
-          else
-            echo "❌ Cổng 22 đang ĐÓNG hoặc bị Security Group chặn! Vui lòng kiểm tra lại hạ tầng."
-            exit 1
-          fi
+    outputs:
+      staging_url: http://${{ needs.provision-infrastructure.outputs.staging_public_ip }}
 
-          # 🌟 ĐÃ CHỈNH SỬA: Thay thế toàn bộ logic check git cũ bằng cơ chế Wipe & Clone bất tử
-      - name: 2. Thực thi Deploy Thử nghiệm qua SSH Remote
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Kiểm tra trạng thái thông mạch cổng SSH (22) trên AWS
+        run: |
+          TARGET_IP="${{ needs.provision-infrastructure.outputs.staging_public_ip }}"
+          echo "🔍 Đang thăm dò kết nối tới địa chỉ AWS: ${TARGET_IP}..."
+          for i in {1..12}; do
+            if nc -zv -w 3 $TARGET_IP 22; then
+              echo "✅ [SUCCESS] Cổng SSH đã mở hoàn toàn! Sẵn sàng bàn giao cho Runner deploy."
+              exit 0
+            fi
+            echo "⏳ Cổng SSH (22) phản hồi từ chối. Server đang load OS, chờ 5 giây (Lần thử $i/12)..."
+            sleep 5
+          done
+          exit 1
+
+      - name: 3. Deploy Kubernetes Manifests via SSH Remote
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
         with:
-          host: 13.220.63.189
+          host: ${{ needs.provision-infrastructure.outputs.staging_public_ip }}
           username: ubuntu
           key: ${{ secrets.AWS_EC2_SSH_KEY }}
-          script_stop: true # Bật tính năng dừng ngay lập tức nếu bất kỳ dòng lệnh Bash nào bên dưới bị lỗi để dễ debug
+          envs: APP_IMAGE
+          script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG: Báo đỏ ngay nếu lệnh nào trong script bị lỗi
           script: |
             echo "=== [BƯỚC 1] KHỞI ĐỘNG HỆ THỐNG K3S ==="
-            export APP_IMAGE="ghcr.io/nt524/secure-ci-cd-pipeline/nodegoat:f962aa8e666629b944d066ad1c5c82f63f4490fb"
             echo "🚚 Docker Image đích: $APP_IMAGE"
-            
-            echo "🤖 Chờ hệ thống K3s sẵn sàng..."
-            until sudo kubectl get nodes; do sleep 3; done
-            
-            echo "=== [BƯỚC 2] ĐỒNG BỘ MÃ NGUỒN MANIFESTS ==="
-            # Nếu phát hiện thư mục cũ, dùng quyền tối cao xóa sạch rác phân quyền root để tránh xung đột
-            if [ -d "app" ]; then
-              echo "🧹 Phát hiện thư mục app cũ. Tiến hành xóa trắng tận gốc..."
-              sudo rm -rf app
-            fi
-            
+
+            # Cấu hình cứng đường dẫn Kubeconfig để kubectl kết nối chuẩn xác vào cụm K3s
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+
+            echo "🤖 Chờ hệ thống K3s API sẵn sàng hoạt động..."
+            for i in {1..15}; do
+              if sudo kubectl get nodes > /dev/null 2>&1; then
+                echo "✅ Hệ thống K3s core đã Online!"
+                break
+              fi
+              echo "⏳ Đang đợi API Server của K3s khởi tạo cấu hình (Lần thử $i/15)..."
+              sleep 5
+            done
+
+            # Kiểm tra và bọc lót tạo luôn Namespace đề phòng hạ tầng Terraform cũ chưa có
+            echo "🏢 Kiểm tra không gian tên (Namespace) staging..."
+            sudo kubectl create namespace nodegoat-staging || true
+
+            echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
+            rm -rf app
+
             echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh testing_aws..."
-            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b feature/testing_aws app
-            
-            # Chuyển bối cảnh làm việc vào sâu trong thư mục repo vừa tải về
+            # Sửa lỗi chính tả tên Repo hoa/thường: NT524/Secure-CI-CD-pipeline
+            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b testing_aws app
+
             cd app
-            
+
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
             sudo kubectl apply -f k8s/mongodb_deployment.yaml
             sudo kubectl apply -f k8s/mongodb_service.yaml
-            
+
             echo "=== [BƯỚC 4] CẤU HÌNH VÀ TRIỂN KHAI APP NODEGOAT ==="
             echo "🔧 Đang thực hiện thay thế token image động vào file deployment..."
-            # KHÔNG dùng sudo cho lệnh sed này để tránh biến file thành quyền sở hữu của root
             sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
-            
-            echo "🔍 Kiểm tra nội dung file sau khi sed:"
+
+            echo "🔍 Kiểm tra nội dung file sau khi cập nhật image tag:"
             grep -A 2 -B 2 "image:" k8s/nodegoat_deployment.yaml
-            
+
             sudo kubectl apply -f k8s/nodegoat_deployment.yaml
             sudo kubectl apply -f k8s/nodegoat_service.yaml
-            
+
             echo "=== [BƯỚC 5] CẬP NHẬT NÓNG VÀ KIỂM TRA TRẠNG THÁI POD ==="
             sudo kubectl rollout restart deployment/nodegoat-app -n nodegoat-staging || true
-            
+
             echo "📊 Đang chờ các Pod trên Kubernetes Cluster chuyển sang trạng thái Running..."
             sudo kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
             sudo kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
-            
-            echo "🎉 [SUCCESS] Chúc mừng Khôi! Module SSH Deployment đã chạy thành công tuyệt đối!"
+
+            echo "🎉 [SUCCESS] Hệ thống kết hợp IaC và CI/CD đã chạy thành công tuyệt đối!"
