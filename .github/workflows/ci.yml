@@ -306,18 +306,19 @@ jobs:
             echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
             rm -rf app
             echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh hiện tại..."
-            # 🌟 TỐI ƯU: Sử dụng biến động của GitHub để tự động lấy đúng Repo và Nhánh đang chạy
             git clone https://github.com/${{ github.repository }}.git -b ${{ github.ref_name }} app
             cd app
+            
+            # 🌟 ĐÃ SỬA LỖI TIMEOUT: Ép hệ thống nghỉ ngơi 15 giây để CPU hạ nhiệt
             echo "🧘 Đang cho K3s API Server nghỉ ngơi 15s để ổn định tài nguyên..."
             sleep 15
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
-            # Bọc lót thêm 1 câu lệnh tạo Namespace phòng hờ Ansible bị skip
             kubectl create namespace nodegoat-staging || true
             
-            kubectl apply -f k8s/mongodb_deployment.yaml
-            kubectl apply -f k8s/mongodb_service.yaml
+            # 🌟 THÊM CỜ --validate=false ĐỂ GIẢM TẢI CHO EC2 T3.MICRO
+            kubectl apply -f k8s/mongodb_deployment.yaml --validate=false
+            kubectl apply -f k8s/mongodb_service.yaml --validate=false
             
             echo "=== [BƯỚC 4] CẤU HÌNH VÀ TRIỂN KHAI APP NODEGOAT ==="
             echo "🔧 Đang thực hiện thay thế token image động vào file deployment..."
@@ -326,15 +327,16 @@ jobs:
             echo "🔍 Kiểm tra nội dung file sau khi cập nhật image tag:"
             grep -A 2 -B 2 "image:" k8s/nodegoat_deployment.yaml
             
-            kubectl apply -f k8s/nodegoat_deployment.yaml
-            kubectl apply -f k8s/nodegoat_service.yaml
+            kubectl apply -f k8s/nodegoat_deployment.yaml --validate=false
+            kubectl apply -f k8s/nodegoat_service.yaml --validate=false
             
             echo "=== [BƯỚC 5] CẬP NHẬT NÓNG VÀ KIỂM TRA TRẠNG THÁI POD ==="
             kubectl rollout restart deployment/nodegoat-app -n nodegoat-staging || true
             
             echo "📊 Đang chờ các Pod trên Kubernetes Cluster chuyển sang trạng thái Running..."
-            kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
-            kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
+            # Nâng timeout lên 120s vì server RAM yếu có thể kéo image chậm hơn bình thường
+            kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=120s
+            kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=120s
             
             echo "🎉 [SUCCESS] Kịch bản Deploy Manifests đã hoàn tất xuất sắc!"
   # dast_scan:

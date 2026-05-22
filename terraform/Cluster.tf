@@ -1,5 +1,41 @@
 # 1. TRUY VẤN SECURITY GROUP ĐÃ CÓ SẴN TRÊN AWS (DATA SOURCE)
 # Lệnh này bảo Terraform: "Lên AWS, tìm cái Security Group nào có tên là 'nodegoat-staging-sg' mang về đây"
+# TẠO SECURITY GROUP (TƯỜNG LỬA CHO MÔI TRƯỜNG STAGING)
+# resource "aws_security_group" "staging_sg" {
+#   name        = "nodegoat-staging-sg"
+#   description = "Allow inbound traffic for SSH and Web app"
+
+#   # CỔNG 22 (SSH): Cho phép cấu hình từ xa.
+#   ingress {
+#     description = "Allow SSH from automation runner"
+#     from_port   = 22
+#     to_port     = 22
+#     protocol    = "tcp"
+#     # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+#   # CỔNG 80 (HTTP WEB): Mở để OWASP ZAP kiểm thử DAST
+#   ingress {
+#     description = "Allow HTTP for public DAST scanning"
+#     from_port   = 80
+#     to_port     = 80
+#     protocol    = "tcp"
+#     # tfsec:ignore:aws-ec2-no-public-ingress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+#   # ĐƯỜNG RA (EGRESS): Cho phép máy chủ tải gói K3s và kéo Docker Image từ GHCR
+#   egress {
+#     description = "Allow all outbound traffic for updates and image pulls"
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     # tfsec:ignore:aws-ec2-no-public-egress-sgr
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# }
+
 data "aws_security_group" "existing_sg" {
   name = "nodegoat-staging-sg"
 }
