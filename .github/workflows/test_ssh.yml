@@ -46,6 +46,7 @@ jobs:
               sudo git config --global --add safe.directory $(pwd)
               sudo git fetch --all
               sudo git reset --hard origin/main || sudo git reset --hard origin/master
+              
             else
               echo "📥 Thư mục trống, tiến hành clone kho lưu trữ từ GitHub..."
               # Thay thế chính xác bằng tên repo thật của em để chạy độc lập không phụ thuộc ngữ cảnh pipeline
