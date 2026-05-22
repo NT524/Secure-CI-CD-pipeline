@@ -39,32 +39,33 @@ jobs:
             until sudo kubectl get nodes; do sleep 3; done
             
             echo "=== [BƯỚC 2] ĐỒNG BỘ MÃ NGUỒN MANIFESTS ==="
-            # Cấu hình an toàn cho Git chạy mượt mà trên EC2
-            git config --global --add safe.directory $(pwd)/app
+            # 🌟 DÒNG QUAN TRỌNG: Sửa lỗi phân quyền "Permission denied" do rác sudo cũ để lại
+            sudo chown -R ubuntu:ubuntu /home/ubuntu
+            
+            # Cấu hình an toàn cho Git
+            git config --global --add safe.directory /home/ubuntu/app
             
             if [ -d "app" ]; then
-              echo "🧹 Phát hiện thư mục cũ, tiến hành đồng bộ nhánh testing_aws..."
+              echo "🧹 Phát hiện thư mục app cũ, tiến hành dọn dẹp và ép đồng bộ..."
               cd app
               
-              # Làm sạch các file rác phát sinh vô tình trong quá trình chạy ứng dụng trước đó
+              # Xóa sạch cấu hình lỗi hoặc các file sinh ra tự động trước đó
               git reset --hard HEAD
               git clean -fd
               
-              echo "📥 Tải cập nhật mới nhất từ GitHub..."
+              echo "📥 Kéo cập nhật mới nhất từ GitHub..."
               git fetch origin
               
-              echo "🔀 Ép hệ thống chuyển sang và lấy đúng code mới nhất của nhánh testing_aws..."
+              echo "🔀 Chuyển đổi và ghim chặt vào nhánh testing_aws mới nhất..."
               git checkout -B testing_aws origin/testing_aws
               git reset --hard origin/testing_aws
             else
               echo "📥 Thư mục trống, tiến hành clone biệt lập nhánh testing_aws..."
-              # Clone trực tiếp nhánh testing_aws để tiết kiệm thời gian và chính xác hạ tầng
               git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b testing_aws app
               cd app
             fi
             
-            echo "📍 Vị trí Git hiện tại để debug:"
-            git status
+            echo "📍 Vị trí Git
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
             sudo kubectl apply -f k8s/mongodb_deployment.yaml
