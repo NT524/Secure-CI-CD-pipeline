@@ -9,3 +9,13 @@ resource "kubernetes_namespace" "nodegoat_staging" {
     }
   }
 }
+
+resource "kubernetes_namespace" "nodegoat_data" {
+  metadata {
+    name = "nodegoat-data"
+    labels = {
+      environment = "staging"
+      app         = "mongodb"
+    }
+  }
+}

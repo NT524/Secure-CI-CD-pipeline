@@ -231,7 +231,14 @@ jobs:
       - name: 4. Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 5. Terraform Apply
+      - name: 5. Setup kind CLI
+        uses: engineerd/setup-kind@v0.5.0
+
+      - name: 6. Build local cosign verification provider image
+        run: |
+          docker build -t local/cosign-gatekeeper-provider:dev policy/cosign-provider
+
+      - name: 7. Terraform Apply
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
@@ -244,7 +251,53 @@ jobs:
           terraform init -upgrade 
           terraform apply -auto-approve
 
-      - name: 6. Deploy Application Manifests
+      - name: 8. Load provider image into kind
+        run: |
+          kind load docker-image local/cosign-gatekeeper-provider:dev --name ${{ env.cluster_name }}
+
+      - name: 9. Install Gatekeeper with external data enabled
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
+          kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+
+      - name: 10. Sync Cosign public key and registry auth into cluster
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+          printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
+          kubectl -n cosign-system create secret generic cosign-public-key \
+            --from-file=cosign.pub=./cosign.pub \
+            --dry-run=client -o yaml | kubectl apply -f -
+          AUTH=$(printf '%s:%s' "$GHCR_USERNAME" "$GHCR_PAT" | base64 -w0)
+          cat > config.json <<EOF
+          {"auths":{"ghcr.io":{"auth":"$AUTH"}}}
+          EOF
+          kubectl -n cosign-system create secret generic ghcr-registry-auth \
+            --from-file=config.json=./config.json \
+            --dry-run=client -o yaml | kubectl apply -f -
+          rm -f cosign.pub
+          rm -f config.json
+
+      - name: 11. Apply Gatekeeper policy gate
+        run: |
+          kubectl apply -f policy/gatekeeper/provider-deployment.yaml
+          kubectl apply -f policy/gatekeeper/provider.yaml
+          kubectl apply -f policy/gatekeeper/constraint-template.yaml
+          for i in $(seq 1 30); do
+            if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          kubectl apply -f policy/gatekeeper/constraint.yaml
+
+      - name: 12. Deploy Application Manifests
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
           # Trỏ KUBECONFIG vào file mà Terraform vừa xuất ra
@@ -253,28 +306,39 @@ jobs:
           # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
 
-          # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
-          kubectl apply -f k8s/ -n ${{ env.namespace }}
+          # 2. Apply database vào namespace riêng
+          kubectl apply -f k8s/mongodb_namespace.yaml
+          kubectl apply -f k8s/mongodb_deployment.yaml
+          kubectl apply -f k8s/mongodb_service.yaml
 
-      - name: 7. Health Check
+          # 3. Apply ứng dụng vào namespace staging có policy gate
+          kubectl apply -f k8s/nodegoat_deployment.yaml
+          kubectl apply -f k8s/nodegoat_service.yaml
+
+      - name: 13. Health Check
         run: |
 
           echo "--- Trạng thái các Pod ---"
+          kubectl get pods -n nodegoat-data
           kubectl get pods -n ${{ env.namespace }}
 
           echo "--- Đợi Deployment hoàn tất ---"
           # Chờ tối đa 2 phút cho mỗi service
-          kubectl rollout status deployment/mongodb -n ${{ env.namespace }} --timeout=120s
+          kubectl rollout status deployment/mongodb -n nodegoat-data --timeout=120s
           kubectl rollout status deployment/nodegoat-app -n ${{ env.namespace }} --timeout=120s
 
           echo "--- Kiểm tra log ứng dụng nếu cần ---"
           # Lệnh này giúp bạn xem app có kết nối DB thành công không
+          kubectl get svc -n nodegoat-data
           kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n nodegoat-data
           kubectl get pods -n ${{ env.namespace }}
 
-      - name: 8. Integration Test (Curl App)
+      - name: 14. Integration Test (Curl App)
         run: |
+          kubectl get svc -n nodegoat-data
           kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n nodegoat-data
           kubectl get pods -n ${{ env.namespace }}
           kubectl get service/nodegoat-app -n ${{ env.namespace }}
 

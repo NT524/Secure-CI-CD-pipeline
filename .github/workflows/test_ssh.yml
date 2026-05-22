@@ -54,6 +54,7 @@ jobs:
             fi
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
+            sudo kubectl apply -f k8s/mongodb_namespace.yaml
             sudo kubectl apply -f k8s/mongodb_deployment.yaml
             sudo kubectl apply -f k8s/mongodb_service.yaml
             
@@ -72,7 +73,7 @@ jobs:
             sudo kubectl rollout restart deployment/nodegoat-app -n nodegoat-staging || true
             
             echo "📊 Đang chờ các Pod trên Kubernetes Cluster chuyển sang trạng thái Running..."
-            sudo kubectl rollout status deployment/mongodb -n nodegoat-staging --timeout=60s
+            sudo kubectl rollout status deployment/mongodb -n nodegoat-data --timeout=60s
             sudo kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
             
             echo "🎉 [SUCCESS] Chúc mừng Khôi! Module SSH Deployment đã chạy thành công tuyệt đối!"

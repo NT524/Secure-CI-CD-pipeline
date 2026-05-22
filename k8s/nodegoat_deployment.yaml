@@ -23,7 +23,7 @@ spec:
         env:
         # Cấu hình chuỗi kết nối DB trỏ tới Service MongoDB nội bộ
         - name: MONGODB_URI
-          value: "mongodb://mongodb:27017/nodegoat"
+          value: "mongodb://mongodb.nodegoat-data.svc.cluster.local:27017/nodegoat"
         command: [ "sh", "-c" ]
         args:
-        - "until nc -z -w 2 mongodb 27017 && echo 'mongodb is ready for connections' && node artifacts/db-reset.js && npm start; do sleep 2; done"
+        - "until nc -z -w 2 mongodb.nodegoat-data.svc.cluster.local 27017 && echo 'mongodb is ready for connections' && node artifacts/db-reset.js && npm start; do sleep 2; done"

@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mongodb
-  namespace: nodegoat-staging
+  namespace: nodegoat-data
 spec:
   replicas: 1
   selector:

@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: K8sRequiredImageSignatures
+metadata:
+  name: require-signed-project-images
+spec:
+  enforcementAction: deny
+  match:
+    namespaces:
+      - nodegoat-staging
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+      - apiGroups: ["apps"]
+        kinds: ["Deployment", "ReplicaSet", "StatefulSet", "DaemonSet"]
+      - apiGroups: ["batch"]
+        kinds: ["Job", "CronJob"]
+  parameters:
+    provider: cosign-gatekeeper-provider
