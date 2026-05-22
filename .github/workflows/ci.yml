@@ -120,6 +120,8 @@ jobs:
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           IMAGE_NAME=ghcr.io/${REPO_LOWER}/jo:${{ github.sha }}
+          BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "REPO_LOWER=${REPO_LOWER}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
