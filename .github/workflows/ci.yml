@@ -137,7 +137,7 @@ jobs:
             BUILD_DATE=${{ env.BUILD_DATE }}
           tags: |
             ${{ env.IMAGE_NAME }}
-            ghcr.io/${{ github.repository }}/juice-shop:latest
+            ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
