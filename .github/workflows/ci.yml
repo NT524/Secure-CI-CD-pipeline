@@ -243,7 +243,6 @@ jobs:
   deploy-app-k3s:
     name: 5. Deploy Manifests to K3s Cluster
     runs-on: ubuntu-latest
-    # CHỈ CHẠY khi Job tạo hạ tầng (4A) thành công rực rỡ
     needs: [build-and-test, provision-infrastructure]
     outputs:
       staging_url: http://${{ needs.provision-infrastructure.outputs.staging_public_ip }}
@@ -252,23 +251,18 @@ jobs:
       - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      # FLOW KIỂM TRA ĐẶC BIỆT: Vòng lặp tự động dò cổng SSH của server mới/cũ
       - name: 2. Kiểm tra trạng thái thông mạch cổng SSH (22) trên AWS
         run: |
           TARGET_IP="${{ needs.provision-infrastructure.outputs.staging_public_ip }}"
           echo "🔍 Đang thăm dò kết nối tới địa chỉ AWS: ${TARGET_IP}..."
-          
-          # Thử kết nối tối đa 12 lần, mỗi lần cách nhau 5 giây (Tổng cộng 60 giây chờ)
           for i in {1..12}; do
             if nc -zv -w 3 $TARGET_IP 22; then
               echo "✅ [SUCCESS] Cổng SSH đã mở hoàn toàn! Sẵn sàng bàn giao cho Runner deploy."
               exit 0
             fi
-            echo "⏳ Cổng SSH (22) phản hồi từ chối (Connection refused). Server đang load OS, chờ 5 giây (Lần thử $i/12)..."
+            echo "⏳ Cổng SSH (22) phản hồi từ chối. Server đang load OS, chờ 5 giây (Lần thử $i/12)..."
             sleep 5
           done
-          
-          echo "❌ [TIMEOUT] Máy chủ không phản hồi cổng 22 sau 1 phút!"
           exit 1
 
       - name: 3. Deploy Kubernetes Manifests via SSH Remote
@@ -280,34 +274,46 @@ jobs:
           username: ubuntu
           key: ${{ secrets.AWS_EC2_SSH_KEY }}
           envs: APP_IMAGE
+          script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG: Báo đỏ ngay nếu lệnh nào trong script bị lỗi
           script: |
             echo "=== [BƯỚC 1] KHỞI ĐỘNG HỆ THỐNG K3S ==="
             echo "🚚 Docker Image đích: $APP_IMAGE"
             
-            echo "🤖 Chờ hệ thống K3s và Namespace sẵn sàng..."
-            until sudo kubectl get nodes; do sleep 3; done
+            # Cấu hình cứng đường dẫn Kubeconfig để kubectl kết nối chuẩn xác vào cụm K3s
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            
+            echo "🤖 Chờ hệ thống K3s API sẵn sàng hoạt động..."
+            for i in {1..15}; do
+              if sudo kubectl get nodes > /dev/null 2>&1; then
+                echo "✅ Hệ thống K3s core đã Online!"
+                break
+              fi
+              echo "⏳ Đang đợi API Server của K3s khởi tạo cấu hình (Lần thử $i/15)..."
+              sleep 5
+            done
+
+            # Kiểm tra và bọc lót tạo luôn Namespace đề phòng hạ tầng Terraform cũ chưa có
+            echo "🏢 Kiểm tra không gian tên (Namespace) staging..."
+            sudo kubectl create namespace nodegoat-staging || true
             
             echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
-            # Vì Terraform vừa tạo máy ảo mới, ta dọn dẹp app cũ một cách an toàn nếu có
             rm -rf app
             
-            echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh testing_aws..."
-            git clone https://github.com/${{ github.repository }} -b testing_aws app
+            echo "📥 Tiến hành clone bản sạch trực tiếp từ nhánh feature/testing_aws..."
+            # Sửa lỗi chính tả tên Repo hoa/thường: NT524/Secure-CI-CD-pipeline
+            git clone https://github.com/NT524/Secure-CI-CD-pipeline.git -b feature/testing_aws app
             
-            # Di chuyển vào thư mục repo để thao tác với các file yaml
             cd app
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
-            # 🌟 ĐÃ KHỬ LỖI: Không cần tạo namespace bằng lệnh bash nữa vì IaC Terraform đã lo liệu xong 100%
             sudo kubectl apply -f k8s/mongodb_deployment.yaml
             sudo kubectl apply -f k8s/mongodb_service.yaml
             
             echo "=== [BƯỚC 4] CẤU HÌNH VÀ TRIỂN KHAI APP NODEGOAT ==="
             echo "🔧 Đang thực hiện thay thế token image động vào file deployment..."
-            # Dùng sed không sudo vì user ubuntu làm chủ thư mục app vừa clone
             sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
             
-            echo "🔍 Kiểm tra nội dung file sau khi sed:"
+            echo "🔍 Kiểm tra nội dung file sau khi cập nhật image tag:"
             grep -A 2 -B 2 "image:" k8s/nodegoat_deployment.yaml
             
             sudo kubectl apply -f k8s/nodegoat_deployment.yaml
