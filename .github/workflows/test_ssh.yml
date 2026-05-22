@@ -1,5 +1,4 @@
 name: 🧪 Test Isolation - SSH Remote Deploy
-
 # Cấu hình trigger thủ công: Giúp em có thể chủ động bấm nút "Run workflow" trên giao diện GitHub Actions để test đi test lại
 on:
   workflow_dispatch:
