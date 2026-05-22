@@ -309,6 +309,8 @@ jobs:
             # 🌟 TỐI ƯU: Sử dụng biến động của GitHub để tự động lấy đúng Repo và Nhánh đang chạy
             git clone https://github.com/${{ github.repository }}.git -b ${{ github.ref_name }} app
             cd app
+            echo "🧘 Đang cho K3s API Server nghỉ ngơi 15s để ổn định tài nguyên..."
+            sleep 15
             
             echo "=== [BƯỚC 3] TRIỂN KHAI DATABASE MONGODB ==="
             # Bọc lót thêm 1 câu lệnh tạo Namespace phòng hờ Ansible bị skip
