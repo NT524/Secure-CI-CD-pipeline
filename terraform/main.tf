@@ -90,7 +90,7 @@ module "eks" {
       #       }
       #     }
       #   }
-      create_launch_template     = true
+      create_launch_template     = false
       use_custom_launch_template = false
 
       tags = {
