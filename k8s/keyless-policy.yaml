@@ -1,0 +1,40 @@
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: secure-devsecops-gate
+spec:
+  images:
+    - glob: "ghcr.io/nt524/secure-ci-cd-pipeline/nodegoat*"
+  
+  # --- CHECK 1: KIỂM TRA CHỮ KÝ IMAGE (KEYLESS IDENTITY) ---
+  authorities:
+    - keyless:
+        url: https://fulcio.sigstore.dev
+        identities:
+          - issuer: https://token.actions.githubusercontent.com
+            subjectRegexp: "https://github.com/NT524/.*"
+      importSecrets:
+        - name: ghcr-registry-auth
+
+  # --- CHECK 2: KIỂM TRA ĐÍNH KÈM SBOM (VERIFY SBOM ATTESTATION) ---
+  attestations:
+    - name: check-sbom-attachment
+      predicateType: spdxjson
+      policy:
+        type: configmap
+        data:
+          name: sbom-verification-policy
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sbom-verification-policy
+  namespace: cosign-system
+data:
+  policy.rego: |
+    package sigstore
+    default allow = false
+    allow {
+      input.predicate.is_valid == true
+    }

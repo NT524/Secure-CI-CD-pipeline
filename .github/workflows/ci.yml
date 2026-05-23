@@ -11,6 +11,7 @@ on:
       - "feature/docker_build"
       - "feature/integration"
       - "feature/terraform"
+      - "feature/keyless_gate" # Thêm nhánh thử nghiệm hiện tại vào trigger
   pull_request:
     branches: ["main"] # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
@@ -114,6 +115,7 @@ jobs:
       full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
 
     # Cấp quyền để ghi vào Container Registry và ký Image (Cần thiết cho tuần 4)
+    # Cập nhật Keyless: Cần id-token: write để lấy OIDC Token ký không dùng khóa tĩnh
     permissions:
       contents: read
       packages: write
@@ -194,15 +196,12 @@ jobs:
       - name: 9. Install Cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: 10. Sign the published Docker image
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      # SỬA TẠI ĐÂY: Loại bỏ việc nạp file cosign.key thủ công, chuyển sang ký bằng OIDC Identity danh tính (Keyless Mode)
+      - name: 10. Sign the published Docker image (Keyless Mode)
         run: |
-          echo "$COSIGN_PRIVATE_KEY" > cosign.key
-          cosign sign --key cosign.key ${{ env.IMAGE_NAME }}
-          rm cosign.key
+          cosign sign ${{ env.IMAGE_NAME }}
 
+          cosign attest --type spdxjson --predicate sbom.spdx.json ${{ env.IMAGE_NAME }}
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
     needs: build-and-test
@@ -239,11 +238,30 @@ jobs:
           TF_VAR_cluster_name: ${{ env.cluster_name }}
           TF_VAR_namespace: ${{ env.namespace }}
         working-directory: terraform
-
         run: |
           terraform init -upgrade 
           terraform apply -auto-approve
 
+      # THÊM MỚI BƯỚC NÀY: Cài đặt công cụ gác cổng Sigstore Policy Controller chính chủ thông qua Helm thay thế cho OPA Gatekeeper cũ
+      - name: 5b. Install Sigstore Policy Controller
+        run: |
+          helm repo add sigstore https://sigstore.github.io/helm-charts
+          helm repo update
+          helm install policy-controller sigstore/policy-controller \
+            --namespace cosign-system \
+            --create-namespace
+          kubectl rollout status deployment/policy-controller-webhook -n cosign-system --timeout=120s
+
+      # THÊM MỚI BƯỚC NÀY: Đồng bộ secret chứa token đăng nhập registry sang namespace mới để Policy Controller đọc được Metadata của Repo Private
+      - name: 5c. Sync Registry Auth for Policy Controller
+        run: |
+          kubectl create secret docker-registry ghcr-registry-auth \
+            --docker-server=ghcr.io \
+            --docker-username=${{ github.actor }} \
+            --docker-password=${{ secrets.GITHUB_TOKEN }} \
+            -n cosign-system --dry-run=client -o yaml | kubectl apply -f -
+
+      # CẬP NHẬT BƯỚC NÀY: Mở rộng bộ luật Policy Gate kiểm tra song song cả Chữ ký Keyless và Báo cáo cấu trúc SBOM (SPDX Format)
       - name: 6. Deploy Application Manifests
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
@@ -253,7 +271,55 @@ jobs:
           # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
 
-          # 2. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
+          # 2. Tạo trực tiếp cấu hình Policy Gate ĐA TẦNG kiểm duyệt (Signature Check + SBOM Attestation Check)
+          cat <<EOF > keyless-policy.yaml
+          apiVersion: policy.sigstore.dev/v1beta1
+          kind: ClusterImagePolicy
+          metadata:
+            name: require-signed-project-images
+          spec:
+            images:
+              - glob: "ghcr.io/nt524/secure-ci-cd-pipeline/nodegoat*"
+            
+            # --- CHỐT CHẶN 1: XÁC THỰC DANH TÍNH KÝ KEYLESS OIDC ---
+            authorities:
+              - keyless:
+                  url: https://fulcio.sigstore.dev
+                  identities:
+                    - issuer: https://token.actions.githubusercontent.com
+                      subjectRegexp: "https://github.com/NT524/.*"
+            importSecrets:
+              - name: ghcr-registry-auth
+
+            # --- CHỐT CHẶN 2: ÉP BUỘC ĐÍNH KÈM CHỨNG THỰC BÁO CÁO SBOM ---
+            attestations:
+              - name: check-sbom-attachment
+                predicateType: spdxjson
+                policy:
+                  type: configmap
+                  data:
+                    name: sbom-verification-policy
+
+          ---
+          # Định nghĩa luật kiểm tra định dạng dữ liệu của file SBOM kèm theo bằng một cụm luật Rego mini
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: sbom-verification-policy
+            namespace: cosign-system
+          data:
+            policy.rego: |
+              package sigstore
+              default allow = false
+              allow {
+                input.predicate.is_valid == true
+              }
+          EOF
+          
+          # Áp dụng chốt chặn bảo mật Keyless vào cụm hạ tầng
+          kubectl apply -f keyless-policy.yaml
+
+          # 3. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
           kubectl apply -f k8s/ -n ${{ env.namespace }}
 
       - name: 7. Health Check
