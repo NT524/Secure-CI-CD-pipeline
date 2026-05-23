@@ -13,7 +13,7 @@ resource "random_string" "suffix" {
 # ✅ VPC Module - Configuring the VPC with NAT Gateway, DNS, and Subnet Tagging
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "~> 5.0"
+  version = "~> 5.13.0"
 
   name = "juice-shop-vpc-${random_string.suffix.result}"
   cidr = lookup(local.vpc_dirs, var.environment)
