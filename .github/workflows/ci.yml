@@ -221,6 +221,7 @@ jobs:
       TF_VAR_environment: ${{ needs.build-and-test.outputs.current_env }}
       APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
       cluster_name: juice-shop-cluster
+      
 
     steps:
       - name: Checkout mã nguồn
@@ -301,6 +302,11 @@ jobs:
       
       - name: Terraform Plan EKS
         id: tf-plan-eks
+        env: 
+          TF_IN_AUTOMATION: "1"
+          TF_VAR_environment: ${{ env.ENVIRONMENT }}
+          TF_VAR_aws_region: ${{ env.AWS_REGION }}
+          TF_VAR_cluster_name: ${{ env.cluster_name }} 
         run: |
           cd terraform
           export exitcode=0
