@@ -221,6 +221,8 @@ jobs:
       ENVIRONMENT: ${{ needs.build-and-test.outputs.current_env }}
       APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
       TF_VAR_environment: ${{ needs.build-and-test.outputs.current_env }}
+    outputs:
+      AWS_EKS_CLUSTER_NAME: ${{steps.set-context.outputs.cluster-name }}
       
 
     steps:
@@ -334,30 +336,27 @@ jobs:
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' }}
         run: terraform apply tfplan
 
-      - name: Install Kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'latest'
-
-      - name: Configure Kubectl for EKS
+      - name: Cài đặt Python và các thư viện Ansible chuyên dụng
         run: |
-          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name "${{ env.cluster_name }}-${{ env.ENVIRONMENT }}"
+          python3 -m pip install --upgrade pip
+          # Cài các gói python cần thiết để Ansible nói chuyện được với AWS và Kubernetes
+          pip install ansible boto3 botocore kubernetes
 
-      - name: Create Isolated Namespace
+      - name: Cài đặt Ansible Collections
         run: |
-          kubectl get namespace ${{ env.K8S_NAMESPACE }} || kubectl create namespace ${{ env.K8S_NAMESPACE }}
+          ansible-galaxy collection install amazon.aws
+          ansible-galaxy collection install kubernetes.core
 
-      - name: Inject Variables via Sed & Deploy
+      - name: Chạy Ansible Playbook để Deploy ứng dụng
+        env:
+          # Truyền toàn bộ biến môi trường vào cho Ansible đọc
+          CLUSTER_NAME: "juice-shop-cluster-${{ env.ENVIRONMENT }}"
+          AWS_REGION: "us-east-1"
+          APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          echo "=== CẬP NHẬT IMAGE VÀ NAMESPACE VÀO MANIFEST ==="
-          sed -i "s|\${app_image}|${APP_IMAGE}|g" k8s/juice-shop.yaml
-          sed -i "s|\${k8s_namespace}|${{ env.K8S_NAMESPACE }}|g" k8s/juice-shop.yaml
-          
-          echo "=== ĐẨY CẤU HÌNH LÊN EKS ==="
-          kubectl apply -f k8s/juice-shop.yaml
-          
-          echo "=== KIỂM TRA TRẠNG THÁI KHỞI ĐỘNG CỦA POD ==="
-          kubectl rollout status deployment/juice-shop -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+          ansible-playbook ansible/deploy-k8s.yml
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest

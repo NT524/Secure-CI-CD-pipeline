@@ -1,0 +1,39 @@
+---
+- name: Deploy Juice Shop Application to Amazon EKS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Ansible sẽ nhận các biến này truyền từ GitHub Actions vào
+    cluster_name: "{{ lookup('env', 'CLUSTER_NAME') }}"
+    aws_region: "{{ lookup('env', 'AWS_REGION') }}"
+    k8s_namespace: "isolated-staging"
+    app_image: "{{ lookup('env', 'APP_IMAGE') }}"
+
+  tasks:
+  - name: 1. Lấy Token xác thực từ AWS EKS (Thay thế bước update-kubeconfig)
+    amazon.aws.eks_cluster_info:
+      name: "{{ cluster_name }}"
+      region: "{{ aws_region }}"
+    register: eks_info
+
+  - name: 2. Tự động tạo Namespace isolated-staging nếu chưa có
+    kubernetes.core.k8s:
+      definition:
+        apiVersion: v1
+        kind: Namespace
+        metadata:
+          name: "{{ k8s_namespace }}"
+      host: "{{ eks_info.cluster.endpoint }}"
+      validate_certs: false
+      # Dùng token động sinh ra từ AWS để login trực tiếp
+      client_key: null
+      kubeconfig: null
+
+  - name: 3. Đẩy file Manifest K8s lên cụm EKS (Kèm Inject biến động)
+    kubernetes.core.k8s:
+      state: present
+      host: "{{ eks_info.cluster.endpoint }}"
+      validate_certs: false
+      definition: "{{ lookup('template', '../k8s/juice-shop.yaml') }}"
