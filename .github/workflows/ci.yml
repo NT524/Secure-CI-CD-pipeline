@@ -292,6 +292,12 @@ jobs:
         uses: azure/setup-kubectl@v4
         with:
           version: 'latest'
+      - name: Clean up Terraform Lock (Nếu có)
+        run: |
+          aws dynamodb delete-item \
+            --table-name "${{ env.DYNAMODB_TABLE }}" \
+            --key '{"LockID": {"S": "${{ env.S3_BUCKET }}/state/${{ env.ENVIRONMENT }}.tfstate"}}' \
+            --region "${{ env.S3_REGION }}"
       
       - name: Terraform Plan EKS
         id: tf-plan-eks
@@ -320,6 +326,7 @@ jobs:
           TF_VAR_environment: ${{ env.ENVIRONMENT }}
           TF_VAR_aws_region: ${{ env.AWS_REGION }}
           TF_VAR_cluster_name: ${{ env.cluster_name }}
+
         run: terraform apply -auto-approve tfplan
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' }}
 
