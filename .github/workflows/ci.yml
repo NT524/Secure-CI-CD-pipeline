@@ -11,7 +11,7 @@ on:
       - "feature/docker_build"
       - "feature/integration"
       - "feature/terraform"
-      - "feature/keyless_gate"
+      - "feature/keyless_gate" # Thêm nhánh thử nghiệm hiện tại vào trigger
   pull_request:
     branches: ["main"] # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
@@ -108,7 +108,7 @@ jobs:
     name: 3. Build & Test Application
     # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
     needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
-    # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
+    # Sử dụng if: always() Đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
     if: always()
     runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
     outputs:
@@ -197,11 +197,14 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       # SỬA TẠI ĐÂY: Loại bỏ việc nạp file cosign.key thủ công, chuyển sang ký bằng OIDC Identity danh tính (Keyless Mode)
+      # Đồng thời nạp COSIGN_YES để tự động đẩy thông tin lên Rekor Log mà không bị hỏi hoài
       - name: 10. Sign the published Docker image (Keyless Mode)
+        env:
+          COSIGN_YES: "true"
         run: |
           cosign sign ${{ env.IMAGE_NAME }}
-
           cosign attest --type spdxjson --predicate sbom.spdx.json ${{ env.IMAGE_NAME }}
+
   # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
   deploy-staging:
     needs: build-and-test
@@ -261,7 +264,7 @@ jobs:
             --docker-password=${{ secrets.GITHUB_TOKEN }} \
             -n cosign-system --dry-run=client -o yaml | kubectl apply -f -
 
-      # CẬP NHẬT BƯỚC NÀY: Mở rộng bộ luật Policy Gate kiểm tra song song cả Chữ ký Keyless và Báo cáo cấu trúc SBOM (SPDX Format)
+      # SỬA TẠI ĐÂY: Áp dụng trực tiếp file keyless-policy.yaml cứng nằm trong thư mục k8s/ thay vì dùng cat <<EOF
       - name: 6. Deploy Application Manifests
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
@@ -271,55 +274,10 @@ jobs:
           # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
           sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
 
-          # 2. Tạo trực tiếp cấu hình Policy Gate ĐA TẦNG kiểm duyệt (Signature Check + SBOM Attestation Check)
-          cat <<EOF > keyless-policy.yaml
-          apiVersion: policy.sigstore.dev/v1beta1
-          kind: ClusterImagePolicy
-          metadata:
-            name: require-signed-project-images
-          spec:
-            images:
-              - glob: "ghcr.io/nt524/secure-ci-cd-pipeline/nodegoat*"
-            
-            # --- CHỐT CHẶN 1: XÁC THỰC DANH TÍNH KÝ KEYLESS OIDC ---
-            authorities:
-              - keyless:
-                  url: https://fulcio.sigstore.dev
-                  identities:
-                    - issuer: https://token.actions.githubusercontent.com
-                      subjectRegexp: "https://github.com/NT524/.*"
-            importSecrets:
-              - name: ghcr-registry-auth
+          # 2. Áp dụng chốt chặn bảo mật Keyless đa tầng từ file tĩnh nằm trong thư mục k8s/
+          kubectl apply -f k8s/keyless-policy.yaml
 
-            # --- CHỐT CHẶN 2: ÉP BUỘC ĐÍNH KÈM CHỨNG THỰC BÁO CÁO SBOM ---
-            attestations:
-              - name: check-sbom-attachment
-                predicateType: spdxjson
-                policy:
-                  type: configmap
-                  data:
-                    name: sbom-verification-policy
-
-          ---
-          # Định nghĩa luật kiểm tra định dạng dữ liệu của file SBOM kèm theo bằng một cụm luật Rego mini
-          apiVersion: v1
-          kind: ConfigMap
-          metadata:
-            name: sbom-verification-policy
-            namespace: cosign-system
-          data:
-            policy.rego: |
-              package sigstore
-              default allow = false
-              allow {
-                input.predicate.is_valid == true
-              }
-          EOF
-          
-          # Áp dụng chốt chặn bảo mật Keyless vào cụm hạ tầng
-          kubectl apply -f keyless-policy.yaml
-
-          # 3. Apply toàn bộ thư mục vào namespace đã tạo bởi Terraform
+          # 3. Apply toàn bộ thư mục manifest vào namespace đã tạo bởi Terraform
           kubectl apply -f k8s/ -n ${{ env.namespace }}
 
       - name: 7. Health Check
