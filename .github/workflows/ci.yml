@@ -11,7 +11,7 @@ on:
       - "feature/docker_build"
       - "feature/integration"
       - "feature/terraform"
-      - "feature/keyless_gate" # Thêm nhánh thử nghiệm hiện tại vào trigger
+      - "feature/keyless_gate"
   pull_request:
     branches: ["main"] # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
 
