@@ -1,4 +1,4 @@
-# --- BỘ LUẬT 1:CHECK KEYLESS VÀ SBOM CHO NODEGOAT (KHO PRIVATE) ---
+# --- BỘ LUẬT 1: CHECK KEYLESS VÀ SBOM CHO NODEGOAT (KHO PRIVATE) ---
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -13,10 +13,6 @@ spec:
           - issuer: https://token.actions.githubusercontent.com
             subjectRegExp: "https://github.com/NT524/.*"
       
-      # KHỐI NÀY: Để Sigstore mượn token chui vào kho Private lấy chữ ký/SBOM
-      importSecrets:
-        - name: ghcr-registry-auth
-      
       attestations:
         - name: check-sbom-attachment
           predicateType: https://spdx.dev/Document
@@ -26,9 +22,12 @@ spec:
               package sigstore
               default allow = false
               allow {
-                # Kiểm tra dữ liệu chứng thực SBOM tồn tại
                 input.predicate != null
               }
+  
+  #  Đưa importSecrets ra ngoài, nằm ngang hàng với mảng authorities
+  importSecrets:
+    - name: ghcr-registry-auth
 
 ---
 # --- BỘ LUẬT 2: CHO PHÉP MONGODB QUA CỬA KHÔNG CẦN KIỂM TRA ---
