@@ -12,7 +12,7 @@ data "aws_region" "current" {}
 
 output "aws_region" {
   description = "The AWS region where resources are deployed"
-  value       = data.aws_region.current.name
+  value       = data.aws_region.current.region
 }
 
 output "cluster_name" {

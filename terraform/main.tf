@@ -44,7 +44,7 @@ module "vpc" {
 # ✅ EKS Cluster Module - Deploying an EKS Cluster with Managed Node Groups
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "19.21.0"
+  version = "~> 20.0"
 
   cluster_name    = local.cluster_name
   cluster_version = "1.29"
