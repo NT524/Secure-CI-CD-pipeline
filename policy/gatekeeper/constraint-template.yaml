@@ -33,14 +33,14 @@ spec:
           image := relevant_images[_]
           response := provider_response(image)
           count(response.errors) > 0
-          msg := sprintf("signature verification failed for image %q: provider error(s): %v", [image, response.errors])
+          msg := sprintf("Xác thực chữ ký thất bại cho image %q: lỗi từ nhà cung cấp: %v", [image, response.errors])
         }
 
         violation[{"msg": msg}] {
           image := relevant_images[_]
           response := provider_response(image)
           count(object.get(response, "system_error", "")) > 0
-          msg := sprintf("signature verification failed for image %q: %s", [image, response.system_error])
+          msg := sprintf("Xác thực chữ ký thất bại cho image %q: %s", [image, response.system_error])
         }
 
         violation[{"msg": msg}] {
@@ -49,7 +49,7 @@ spec:
           result := response.responses[_]
           result[0] == image
           result[2] != ""
-          msg := sprintf("image %q is denied because it is unsigned or the cosign signature is not trusted: %s", [image, result[2]])
+          msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, result[2]])
         }
 
         violation[{"msg": msg}] {
@@ -61,8 +61,8 @@ spec:
           result[0] == image
           verified := object.get(result[1], "verified", false)
           not verified
-          detail := object.get(result[1], "message", "cosign verification returned false")
-          msg := sprintf("image %q is denied because it is unsigned or the cosign signature is not trusted: %s", [image, detail])
+          detail := object.get(result[1], "message", "Cosign không thể xác thực chữ ký")
+          msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, detail])
         }
 
         violation[{"msg": msg}] {
@@ -71,7 +71,7 @@ spec:
           count(response.errors) == 0
           count(object.get(response, "system_error", "")) == 0
           not has_response_for_image(response, image)
-          msg := sprintf("image %q is denied because the cosign verification provider returned no decision", [image])
+          msg := sprintf("Image %q bị từ chối vì nhà cung cấp dịch vụ xác thực Cosign không trả về quyết định", [image])
         }
 
         relevant_images[image] {
