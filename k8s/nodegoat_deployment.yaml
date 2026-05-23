@@ -13,6 +13,9 @@ spec:
       labels:
         app: nodegoat
     spec:
+      # THÊM DÒNG NÀY: Cấp thẻ từ đăng nhập kho Private cho Pod
+      imagePullSecrets:
+        - name: ghcr-registry-auth
       containers:
       - name: nodegoat
         # Thay thế bằng image bạn đã build ở Bước 1
