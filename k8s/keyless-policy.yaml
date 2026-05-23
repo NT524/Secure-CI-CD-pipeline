@@ -1,4 +1,4 @@
-# --- BỘ LUẬT 1: ÉP BUỘC CHECK KEYLESS VÀ SBOM CHO NODEGOAT (KHO PRIVATE) ---
+# --- BỘ LUẬT 1: ÉP BUỘC CHECK KEYLESS VÀ SBOM CHO NODEGOAT ---
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -12,10 +12,6 @@ spec:
         identities:
           - issuer: https://token.actions.githubusercontent.com
             subjectRegExp: "https://github.com/NT524/.*"
-        
-        # Đưa importSecrets vào đúng vị trí hợp lệ bên trong khối keyless
-        importSecrets:
-          - name: ghcr-registry-auth
       
       attestations:
         - name: check-sbom-attachment
@@ -26,6 +22,7 @@ spec:
               package sigstore
               default allow = false
               allow {
+                # Kiểm tra dữ liệu chứng thực SBOM tồn tại không bị rỗng
                 input.predicate != null
               }
 
