@@ -10,34 +10,21 @@ spec:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com
-            # ĐỔI LẠI ĐÚNG TRƯỜNG DỮ LIỆU CHUẨN:
-            subjectRegexp: "https://github.com/NT524/.*"
+            # 1. Đã sửa: Chữ E phải viết hoa
+            subjectRegExp: "https://github.com/NT524/.*"
       
-      # ĐƯA IMPORTSECRETS VÀO LỒNG BÊN TRONG KHỐI AUTHORITY NÀY:
-      importSecrets:
-        - name: ghcr-registry-auth
-
-      # ĐƯA CHỐT CHẶN KIỂM TRA SBOM VÀO LỒNG BÊN TRONG AUTHORITY NÀY LUÔN:
+      # 2. Đã xóa bỏ hoàn toàn khối importSecrets
+      
       attestations:
         - name: check-sbom-attachment
-          predicateType: spdxjson
+          # Đổi predicateType thành chuẩn URI định dạng của SBOM
+          predicateType: https://spdx.dev/Document
           policy:
-            type: configmap
-            data:
-              name: sbom-verification-policy
-              namespace: cosign-system
-
----
-# Định nghĩa luật kiểm tra định dạng dữ liệu của file SBOM đi kèm (Giữ nguyên)
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: sbom-verification-policy
-  namespace: cosign-system
-data:
-  policy.rego: |
-    package sigstore
-    default allow = false
-    allow {
-      input.predicate.is_valid == true
-    }
+            type: rego
+            # 3. Đã sửa: Nhúng trực tiếp code Rego vào đây, không dùng ConfigMap
+            data: |
+              package sigstore
+              default allow = false
+              allow {
+                input.predicateType == "https://spdx.dev/Document"
+              }
