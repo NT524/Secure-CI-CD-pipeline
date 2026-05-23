@@ -324,6 +324,10 @@ jobs:
           else 
             exit 0
           fi
+      - name: Terraform Taint or Refresh State
+        working-directory: terraform
+        run: |
+          terraform refresh
 
       - name: Terraform Apply (Provision EKS)
         working-directory: terraform

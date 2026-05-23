@@ -80,21 +80,23 @@ module "eks" {
       max_size     = lookup(local.desired_instances, var.environment)
       desired_size = lookup(local.desired_instances, var.environment)
 
-      block_device_mappings = {
-        xvda = {
-          device_name = "/dev/xvda"
-          ebs = {
-            volume_size = 50
-            volume_type = "gp3"
-            encrypted   = true
-          }
-        }
-      }
+      #   block_device_mappings = {
+      #     xvda = {
+      #       device_name = "/dev/xvda"
+      #       ebs = {
+      #         volume_size = 50
+      #         volume_type = "gp3"
+      #         encrypted   = true
+      #       }
+      #     }
+      #   }
+      create_launch_template     = true
+      use_custom_launch_template = false
 
       tags = {
         Environment = var.environment
         Terraform   = "true"
-        Kubernetes = "EKS"
+        Kubernetes  = "EKS"
         NodeGroup   = "managed"
       }
 
