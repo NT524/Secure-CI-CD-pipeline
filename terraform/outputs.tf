@@ -12,7 +12,7 @@ data "aws_region" "current" {}
 
 output "aws_region" {
   description = "The AWS region where resources are deployed"
-  value       = data.aws_region.current.region
+  value       = data.aws_region.current.name
 }
 
 output "cluster_name" {
@@ -22,12 +22,12 @@ output "cluster_name" {
 
 output "node_group_arns" {
   description = "ARNs of the EKS managed node groups"
-  value       = module.eks.node_group_arns
+  value       = [for group in module.eks.eks_managed_node_groups : group.node_group_arn]
 }
 
 output "node_group_ids" {
     description = "IDs of the EKS managed node groups"
-    value       = module.eks.node_group_ids
+    value       = [for group in module.eks.eks_managed_node_groups : group.node_group_id]
 }
 
 output "vpc_id" {
