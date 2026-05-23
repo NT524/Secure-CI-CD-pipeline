@@ -1,3 +1,4 @@
+# --- BỘ LUẬT 1: ÉP BUỘC CHECK KEYLESS VÀ SBOM CHO NODEGOAT ---
 apiVersion: policy.sigstore.dev/v1beta1
 kind: ClusterImagePolicy
 metadata:
@@ -10,21 +11,31 @@ spec:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com
-            # 1. Đã sửa: Chữ E phải viết hoa
             subjectRegExp: "https://github.com/NT524/.*"
-      
-      # 2. Đã xóa bỏ hoàn toàn khối importSecrets
       
       attestations:
         - name: check-sbom-attachment
-          # Đổi predicateType thành chuẩn URI định dạng của SBOM
           predicateType: https://spdx.dev/Document
           policy:
             type: rego
-            # 3. Đã sửa: Nhúng trực tiếp code Rego vào đây, không dùng ConfigMap
             data: |
               package sigstore
               default allow = false
               allow {
-                input.predicateType == "https://spdx.dev/Document"
+                # Kiểm tra nội dung SBOM có tồn tại (không bị rỗng)
+                input.predicate != null
               }
+
+---
+# --- BỘ LUẬT 2: CHO PHÉP MONGODB QUA CỬA KHÔNG CẦN KIỂM TRA ---
+apiVersion: policy.sigstore.dev/v1beta1
+kind: ClusterImagePolicy
+metadata:
+  name: allow-public-images
+spec:
+  images:
+    - glob: "index.docker.io/library/mongo*"
+    - glob: "docker.io/library/mongo*"
+  authorities:
+    - static:
+        action: pass
