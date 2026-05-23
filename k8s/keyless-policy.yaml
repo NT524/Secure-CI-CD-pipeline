@@ -5,30 +5,30 @@ metadata:
 spec:
   images:
     - glob: "ghcr.io/nt524/secure-ci-cd-pipeline/nodegoat*"
-  
-  # --- CHỐT CHẶN 1: XÁC THỰC DANH TÍNH KÝ KEYLESS OIDC ---
   authorities:
     - keyless:
         url: https://fulcio.sigstore.dev
         identities:
           - issuer: https://token.actions.githubusercontent.com
-            subject:
-              type: regex
-              val: "https://github.com/NT524/.*"
-  
-  # Đưa importSecrets ra ngang hàng trong authorities theo đúng spec mới của policy-controller
-  importSecrets:
-    - name: ghcr-registry-auth
+            # ĐỔI LẠI ĐÚNG TRƯỜNG DỮ LIỆU CHUẨN:
+            subjectRegexp: "https://github.com/NT524/.*"
+      
+      # ĐƯA IMPORTSECRETS VÀO LỒNG BÊN TRONG KHỐI AUTHORITY NÀY:
+      importSecrets:
+        - name: ghcr-registry-auth
 
-  # --- CHỐT CHẶN 2: ÉP BUỘC ĐÍNH KÈM CHỨNG THỰC BÁO CÁO SBOM ---
-  policy:
-    type: configmap
-    data:
-      name: sbom-verification-policy
-      namespace: cosign-system
+      # ĐƯA CHỐT CHẶN KIỂM TRA SBOM VÀO LỒNG BÊN TRONG AUTHORITY NÀY LUÔN:
+      attestations:
+        - name: check-sbom-attachment
+          predicateType: spdxjson
+          policy:
+            type: configmap
+            data:
+              name: sbom-verification-policy
+              namespace: cosign-system
 
 ---
-# Định nghĩa luật kiểm tra định dạng dữ liệu của file SBOM đi kèm bằng Rego
+# Định nghĩa luật kiểm tra định dạng dữ liệu của file SBOM đi kèm (Giữ nguyên)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -39,5 +39,5 @@ data:
     package sigstore
     default allow = false
     allow {
-      input.attestations[_].predicateType == "https://spdx.dev/Document"
+      input.predicate.is_valid == true
     }
