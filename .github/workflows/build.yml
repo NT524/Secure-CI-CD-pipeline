@@ -73,7 +73,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
-          push: true
+          push: false
+          load: true 
           tags: |
             ${{ env.IMAGE_NAME }}
             ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
@@ -100,13 +101,14 @@ jobs:
           image-ref: "${{ env.IMAGE_NAME }}"
           format: "json"
           output: "trivy-report.json"
-          exit-code: "0"
+          exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
 
       # 🚀 KHÔI PHỤC: Quét Trivy xuất bản HTML cực đẹp để báo cáo giảng viên
       - name: Run Trivy Vulnerability Scanner (HTML Output)
+      
         run: |
           mkdir -p trivy-templates
           curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-templates/html.tpl
@@ -161,3 +163,7 @@ jobs:
           echo "$COSIGN_PRIVATE_KEY" > cosign.key
           cosign sign --yes --key cosign.key ${{ env.IMAGE_NAME }}
           rm cosign.key
+
+      - name: Push Docker Image
+        run: |
+            docker push ${{ env.IMAGE_NAME }}
