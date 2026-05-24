@@ -161,6 +161,7 @@ resource "null_resource" "ansible_deploy" {
         -i ${path.cwd}/../ansible/inventory.ini \
         -e "tf_var_k8s_namespace=${var.K8S_NAMESPACE}" \
         -e "tf_var_image_name=${var.IMAGE_NAME}"
+        -e "tf_var_GHCR_PAT=${var.GHCR_PAT}"
 
     EOT
   }

@@ -36,9 +36,15 @@ variable "K8S_NAMESPACE" {
 variable "AWS_ACCESS_KEY_ID" {
   description = "AWS Access Key ID for GitHub Actions"
   type        = string
+  sensitive   = true
 }
 variable "AWS_SECRET_ACCESS_KEY" {
   description = "AWS Secret Access Key for GitHub Actions"
+  type        = string
+  sensitive   = true
+}
+variable "GHCR_PAT" {
+  description = "GitHub Personal Access Token for pushing Docker images to GitHub Container Registry"
   type        = string
   sensitive   = true
 }
