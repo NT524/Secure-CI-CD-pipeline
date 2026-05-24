@@ -193,22 +193,23 @@ jobs:
         env:
           COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
           GHCR_USERNAME: ${{ github.actor }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }} 
         run: |
           kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+          
+          # 1. Tạo khóa Public Key cho Cosign
           printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
           kubectl -n cosign-system create secret generic cosign-public-key \
             --from-file=cosign.pub=./cosign.pub \
             --dry-run=client -o yaml | kubectl apply -f -
-          AUTH=$(printf '%s:%s' "$GHCR_USERNAME" "$GHCR_PAT" | base64 -w0)
-          cat > config.json <<EOF
-          {"auths":{"ghcr.io":{"auth":"$AUTH"}}}
-          EOF
-          kubectl -n cosign-system create secret generic ghcr-registry-auth \
-            --from-file=config.json=./config.json \
+          
+          kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USERNAME" \
+            --docker-password="$GHCR_PAT" \
             --dry-run=client -o yaml | kubectl apply -f -
+            
           rm -f cosign.pub
-          rm -f config.json
 
       - name: Log in to GitHub Container Registry for Provider
         uses: docker/login-action@v3
