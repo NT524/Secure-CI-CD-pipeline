@@ -18,7 +18,8 @@ jobs:
       - name: 3. Terraform Init & Validate
         run: |
           cd terraform
-          terraform init
+          # 🛠️ ĐÃ SỬA: Thêm cờ -upgrade để dứt điểm lỗi conflict phiên bản plugin Kubernetes (~> 2.24)
+          terraform init -upgrade
           terraform validate
 
   # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
@@ -106,7 +107,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 2. Run ESLint Scan
-        working-directory: app/NodeJS/NodeGoat/
+        # 🛠️ ĐÃ SỬA: Chuyển đường dẫn làm việc từ NodeGoat cũ sang juice-shop mới
+        working-directory: app/NodeJS/juice-shop/
         run: |
           npm install
           # Xuất bản định dạng JSON phục vụ parse tự động
@@ -119,8 +121,8 @@ jobs:
         with:
           name: eslint-security-reports
           path: |
-            app/NodeJS/NodeGoat/eslint-report.json
-            app/NodeJS/NodeGoat/eslint-report.html
+            app/NodeJS/juice-shop/eslint-report.json
+            app/NodeJS/juice-shop/eslint-report.html
 
   # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
   iac-scan:
