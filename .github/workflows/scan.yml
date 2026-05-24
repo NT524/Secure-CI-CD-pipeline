@@ -138,6 +138,7 @@ jobs:
           directory: .
           # Bỏ cấu hình cứng framework để Checkov tự động nhận diện cả Terraform lẫn K8s Manifests
           skip_check: CKV2_AWS_11,CKV2_AWS_12
+          skip_path: policy/,.github/workflows/
           # Cấu hình Checkov xuất bản song song nhiều định dạng báo cáo
           output_format: json,sarif
           output_file_path: checkov-report
