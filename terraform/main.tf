@@ -145,9 +145,6 @@ resource "null_resource" "ansible_deploy" {
       AWS_SECRET_ACCESS_KEY = var.AWS_SECRET_ACCESS_KEY
       AWS_DEFAULT_REGION    = var.aws_region
       CLUSTER_NAME          = "${local.cluster_name}"
-      K8S_NAMESPACE         = var.K8S_NAMESPACE
-      IMAGE_NAME            = var.IMAGE_NAME
-      ENVIRONMENT           = var.environment
     }
 
     # Lệnh thực thi chạy Playbook

@@ -8,7 +8,7 @@
     # Ansible sẽ nhận các biến này truyền từ GitHub Actions vào
     k8s_namespace: "{{tf_var_k8s_namespace}}"
     app_image: "{{tf_var_image_name}}"
-    GHCR_PAT: "{{tf_var_ghcr_pat}}"
+    GHCR_PAT: "{{tf_var_GHCR_PAT}}"
 
   tasks:
   - name: Create Kubernetes Namespace using kubectl
