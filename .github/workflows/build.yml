@@ -73,6 +73,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
+          load: true 
           push: false 
           tags: |
             ${{ env.IMAGE_NAME }}
@@ -88,7 +89,7 @@ jobs:
           image-ref: "${{ env.IMAGE_NAME }}"
           format: "json"
           output: "trivy-report.json"
-          exit-code: "0"
+          exit-code: "0"  
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
