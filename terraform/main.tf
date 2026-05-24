@@ -104,4 +104,24 @@ module "eks" {
 
   }
 
+  authentication_mode = "API_AND_CONFIG_MAP"
+
+  access_entries = {
+    github_actions = {
+      kubernetes_groups = []
+      # Thay bằng ARN của IAM User hoặc Role mà GitHub Actions đang dùng
+      principal_arn     = "arn:aws:iam::451620995044:user/NT524" 
+      
+      policy_associations = {
+        cluster_admin = {
+          # Cấp quyền Admin trên toàn bộ Cluster
+          policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+
 }

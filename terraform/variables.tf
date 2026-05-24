@@ -13,3 +13,8 @@ variable "cluster_name" {
   description = "Name of the EKS cluster"
   type        = string
 }
+
+variable "ARN_IAM_USER" {
+  description = "ARN of the IAM User or Role that GitHub Actions will use for authentication"
+  type        = string
+}

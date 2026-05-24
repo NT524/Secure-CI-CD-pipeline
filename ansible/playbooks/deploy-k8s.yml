@@ -21,10 +21,8 @@
         kind: Namespace
         metadata:
           name: "{{ k8s_namespace }}"
-      # Ansible tự động đọc ~/.kube/config để kết nối
 
   - name: Deploy Juice Shop Application using Kubernetes Manifest
     kubernetes.core.k8s:
       state: present
       definition: "{{ lookup('template', '../k8s/juice-shop.yaml') }}"
-      # Ansible tự động đọc ~/.kube/config để kết nối
