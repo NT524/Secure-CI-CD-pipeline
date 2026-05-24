@@ -18,7 +18,7 @@
   - name: Create Kubernetes Namespace for Juice Shop
     kubernetes.core.k8s:
       host: "{{ k8s_auth_host }}"
-      token: "{{ k8s_auth_token }}"
+      api_key: "{{ k8s_auth_token }}"
       validate_certs: false
       state: present
       definition:
@@ -30,7 +30,7 @@
   - name: Deploy Juice Shop Application using Kubernetes Manifest
     kubernetes.core.k8s:
       host: "{{ k8s_auth_host }}"
-      token: "{{ k8s_auth_token }}"
+      api_key: "{{ k8s_auth_token }}"
       validate_certs: false
       state: present
       definition: "{{ lookup('template', '../k8s/juice-shop.yaml') }}"
