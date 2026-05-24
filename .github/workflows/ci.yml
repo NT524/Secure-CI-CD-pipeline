@@ -325,13 +325,13 @@ jobs:
             exit 0
           fi
       
-      - name: Terraform destroy (Clean up resources after testing - Optional)
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
-        working-directory: terraform
-        env:
-          TF_VAR_aws_region: ${{ env.AWS_REGION }}
-          TF_VAR_cluster_name: ${{ env.cluster_name }}
-        run: terraform destroy -auto-approve
+      # - name: Terraform destroy (Clean up resources after testing - Optional)
+      #   if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
+      #   working-directory: terraform
+      #   env:
+      #     TF_VAR_aws_region: ${{ env.AWS_REGION }}
+      #     TF_VAR_cluster_name: ${{ env.cluster_name }}
+      #   run: terraform destroy -auto-approve
 
       # 🌟 SỬA LẠI CÚ PHÁP CHẠY FILE PLAN CHUẨN XÁC
       - name: Terraform Apply (Provision EKS)
