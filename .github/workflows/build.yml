@@ -9,7 +9,6 @@ on:
 
 jobs:
   # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
-  # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
   build-and-test:
     name: Build & Push Application
     # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
@@ -29,6 +28,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      security-events: write # BẮT BUỘC: Cấp quyền đẩy file SARIF lên tab Security của GitHub
 
     steps:
       # Bước 1: Lấy code từ GitHub về cái máy ảo Ubuntu kia
@@ -45,9 +45,9 @@ jobs:
       - name: Prepare Image Name & Environment
         id: prep
         run: |
-
-          
-          ENVIRONMENT=${{ env.ENVIRONMENT }}
+          # SỬA LỖI TRỐNG BIẾN: Nếu env.ENVIRONMENT bị rỗng từ file Mẹ, tự động fallback về 'staging' để không gãy tag
+          ENVIRONMENT="${{ env.ENVIRONMENT }}"
+          if [ -z "$ENVIRONMENT" ]; then ENVIRONMENT="staging"; fi
           echo "ENV=${ENVIRONMENT}" >> $GITHUB_OUTPUT
           
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
@@ -58,8 +58,6 @@ jobs:
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "VERSION=${VERSION_TAG}" >> $GITHUB_OUTPUT
-          
-      
 
       - name: Thiết lập Docker Buildx (BuildKit)
         uses: docker/setup-buildx-action@v3
@@ -95,15 +93,62 @@ jobs:
           path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
           retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
 
-      - name: Run Trivy Vulnerability Scanner
+      # 🚀 KHÔI PHỤC: Quét Trivy xuất bản JSON
+      - name: Run Trivy Vulnerability Scanner (JSON Output)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}"
-          format: "table"
-          exit-code: "0" # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
-          ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
+          format: "json"
+          output: "trivy-report.json"
+          exit-code: "0"
+          ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
+
+      # 🚀 KHÔI PHỤC: Quét Trivy xuất bản HTML cực đẹp để báo cáo giảng viên
+      - name: Run Trivy Vulnerability Scanner (HTML Output)
+        run: |
+          mkdir -p trivy-templates
+          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-templates/html.tpl
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $PWD:/root/workspace \
+            aquasec/trivy:latest image \
+            --format template \
+            --template "@/root/workspace/trivy-templates/html.tpl" \
+            --output /root/workspace/trivy-report.html \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            ${{ env.IMAGE_NAME }}
+
+      # 🚀 KHÔI PHỤC: Quét Trivy định dạng SARIF để đồng bộ lên Tab Security của GitHub Web
+      - name: Run Trivy Vulnerability Scanner (SARIF Format)
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v $PWD:/root/workspace \
+            aquasec/trivy:latest image \
+            --format sarif \
+            --output /root/workspace/trivy-report.sarif \
+            --severity CRITICAL,HIGH \
+            --ignore-unfixed \
+            ${{ env.IMAGE_NAME }}
+
+      - name: Upload Trivy SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy-report.sarif
+
+      - name: Upload Trivy Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-container-reports
+          path: |
+            trivy-report.json
+            trivy-report.html
+            trivy-report.sarif
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -114,5 +159,5 @@ jobs:
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
         run: |
           echo "$COSIGN_PRIVATE_KEY" > cosign.key
-          cosign sign --key cosign.key ${{ env.IMAGE_NAME }}
+          cosign sign --yes --key cosign.key ${{ env.IMAGE_NAME }}
           rm cosign.key
