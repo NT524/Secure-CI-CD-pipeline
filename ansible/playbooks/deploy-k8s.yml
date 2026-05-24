@@ -10,11 +10,12 @@
     aws_region: "{{ lookup('env', 'AWS_REGION') }}"
     k8s_namespace: "{{ lookup('env', 'K8S_NAMESPACE') }}"
     app_image: "{{ lookup('env', 'APP_IMAGE') }}"
+    environment: "{{ lookup('env', 'ENVIRONMENT') }}"
 
   tasks:
   - name: Verify EKS Cluster Information
     amazon.aws.eks_cluster_info:
-      name: "{{ cluster_name }}"
+      name: "{{ cluster_name }}-{{ environment }}"
       region: "{{ aws_region }}"
     register: eks_info
 

@@ -212,9 +212,8 @@ jobs:
   # =========================================================
   # JOB QUẢN LÝ HẠ TẦNG CLOUD AWS (TERRAFORM IN FRASTRUCTURE)
   # =========================================================
-  deploy-app-eks:
+  Infrastructure-provisioning:
     name: Provision & Deploy to Amazon EKS
-    needs: build-and-test
     runs-on: ubuntu-latest
     env:
       TF_IN_AUTOMATION: "1"
@@ -341,7 +340,16 @@ jobs:
           TF_VAR_cluster_name: ${{ env.cluster_name }}
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
         run: terraform apply tfplan
+  deploy-app-eks:
+    name: Deploy Application to Amazon EKS
+    needs: [Infrastructure-provisioning, build-and-test]
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: ${{ needs.build-and-test.outputs.current_env }}
+      APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
+      cluster_name: juice-shop-cluster
 
+    steps:
       - name: Install Ansible and Kubernetes dependencies
         run: |
           python3 -m pip install --upgrade pip
@@ -363,6 +371,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           ansible-playbook ansible/playbooks/deploy-k8s.yml -i ansible/inventory.ini
+  
+  
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest
