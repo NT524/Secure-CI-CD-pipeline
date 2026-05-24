@@ -43,10 +43,12 @@ jobs:
           cache-dependency-path: app/NodeJS/juice-shop/package.json
 
       - name: Install Dependencies
-        run: npm ci # Performs a clean install of dependencies
-
+        run: npm install # Performs a clean install of dependencies
+        working-directory: app/NodeJS/juice-shop
+        
       - name: Run Unit Tests
         run: npm test # Triggers the test script from your package.json
+        working-directory: app/NodeJS/juice-shop
 
       - name: Prepare Image Name & Environment
         id: prep
