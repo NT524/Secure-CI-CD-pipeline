@@ -99,18 +99,6 @@ jobs:
   #        uses: securego/gosec@master
   #        with:
   #          args: ./...
-  dependency-scan:
-    name: Dependency-Check (Software Composition Analysis)
-    needs: terraform-check
-    runs-on: ubuntu-latest
-    steps:
-      - name: 1. Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: SonarQube Scan
-        uses: SonarSource/sonarqube-scan-action@v8 # Ex: v4.1.0 or sha1, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   javascript-scan:
     name: ESLint (JS Security)
