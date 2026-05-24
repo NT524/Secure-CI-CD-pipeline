@@ -6,7 +6,7 @@ on:
 jobs:
   # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
   terraform-check:
-    name: 1. Terraform Validation
+    name: Terraform Validation
     runs-on: ubuntu-latest
     steps:
       - name: 1. Checkout Source Code
@@ -21,9 +21,10 @@ jobs:
           terraform init -backend=false -input=false -upgrade
           terraform validate
 
+
   # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
   semgrep-scan:
-    name: 2a. Semgrep (Multi-rules)
+    name: Semgrep (Multi-rules)
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
@@ -61,30 +62,30 @@ jobs:
         with:
           sarif_file: semgrep-report.sarif
 
-  python-scan:
-    name: 2b. Bandit (Python SAST)
-    needs: terraform-check
-    runs-on: ubuntu-latest
-    steps:
-      - name: 1. Checkout Source Code
-        uses: actions/checkout@v4
+  # python-scan:
+  #   name: 2b. Bandit (Python SAST)
+  #   needs: terraform-check
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: 1. Checkout Source Code
+  #       uses: actions/checkout@v4
 
-      - name: 2. Run Bandit Scan
-        run: |
-          pip install bandit
-          # 🛠️ ĐÃ SỬA: Thêm cờ -x để né thư mục policy/ và .github/, tránh quét nhầm script hạ tầng của ông và Khôi
-          bandit -r . -x ./policy,./.github -f json -o bandit-report.json || true
-          # Xuất bản định dạng HTML cho con người đọc
-          bandit -r . -x ./policy,./.github -f html -o bandit-report.html || true
+  #     - name: 2. Run Bandit Scan
+  #       run: |
+  #         pip install bandit
+  #         # 🛠️ ĐÃ SỬA: Thêm cờ -x để né thư mục policy/ và .github/, tránh quét nhầm script hạ tầng của ông và Khôi
+  #         bandit -r . -x ./policy,./.github -f json -o bandit-report.json || true
+  #         # Xuất bản định dạng HTML cho con người đọc
+  #         bandit -r . -x ./policy,./.github -f html -o bandit-report.html || true
 
-      - name: 3. Upload Bandit Security Reports
-        uses: actions/upload-artifact@v4
-        if: always() 
-        with:
-          name: bandit-security-reports
-          path: |
-            bandit-report.json
-            bandit-report.html
+  #     - name: 3. Upload Bandit Security Reports
+  #       uses: actions/upload-artifact@v4
+  #       if: always() 
+  #       with:
+  #         name: bandit-security-reports
+  #         path: |
+  #           bandit-report.json
+  #           bandit-report.html
 
   # --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
   #  golang-scan:
@@ -98,9 +99,21 @@ jobs:
   #        uses: securego/gosec@master
   #        with:
   #          args: ./...
+  dependency-scan:
+    name: Dependency-Check (Software Composition Analysis)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v4.1 # Ex: v4.1.0 or sha1, See the latest version at https://github.com/marketplace/actions/official-sonarqube-scan
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   javascript-scan:
-    name: 2d. ESLint (JS Security)
+    name: ESLint (JS Security)
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
@@ -108,15 +121,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 2. Run ESLint Scan
+        working-directory: app/NodeJS/juice-shop/
         run: |
-          # BƯỚC 1: Cài đặt plugin bảo mật ở THƯ MỤC GỐC để file eslint.config.js đọc được lập tức
-          npm install eslint-plugin-security --no-save
-          
-          # BƯỚC 2: Di chuyển vào thư mục Juice Shop để cài đặt các package phụ thuộc của ứng dụng
-          cd app/NodeJS/juice-shop/
+          # Cài đặt toàn bộ thư viện cần thiết (bao gồm cả thư viện test)
           npm install
           
-          # BƯỚC 3: Kích hoạt quét và xuất bản báo cáo thẳng vào thư mục Juice Shop
+          # Chạy Unit Test trước, nếu test lỗi thì CI dừng luôn (không chạy bước quét bảo mật phía dưới)
+          # Nếu muốn quét bảo mật bất kể test lỗi, hãy thêm "|| true" vào sau lệnh npm test
+          npm test
+          
+          # Cài thêm plugin bảo mật và quét
+          npm install eslint-plugin-security --no-save
           npx eslint . -f json -o eslint-report.json || true
           npx eslint . -f html -o eslint-report.html || true
 
@@ -131,7 +146,7 @@ jobs:
 
   # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
   iac-scan:
-    name: 2e. Checkov (IaC Security)
+    name: Checkov (IaC Security)
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
@@ -166,7 +181,7 @@ jobs:
 
   # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
   secret-scan:
-    name: 2f. TruffleHog (Secret Scanning)
+    name: TruffleHog (Secret Scanning)
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
@@ -205,3 +220,5 @@ jobs:
           path: |
             trufflehog-report.json
             trufflehog-report.html
+
+          
