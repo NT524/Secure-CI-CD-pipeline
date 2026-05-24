@@ -89,7 +89,7 @@ jobs:
         with:
           image-ref: "${{ env.IMAGE_NAME }}"
           format: "template"
-          template: "/contrib/html.tpl" 
+          template: "@contrib/html.tpl"
           output: "trivy-report.html"
           exit-code: "0"
           ignore-unfixed: true
