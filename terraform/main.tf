@@ -77,7 +77,7 @@ module "eks" {
       instance_types = [lookup(local.instance_types, var.environment)]
 
       min_size     = 1
-      max_size     = lookup(local.desired_instances, var.environment)
+      max_size     = 3
       desired_size = lookup(local.desired_instances, var.environment)
 
       #   block_device_mappings = {

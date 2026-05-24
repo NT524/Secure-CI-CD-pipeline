@@ -13,7 +13,7 @@ locals {
     }
 
     instance_types = {
-        staging = "t3.medium"
+        staging = "t3.small"
     }
 
     desired_instances = {
