@@ -261,6 +261,14 @@ jobs:
             sleep 2
           done
           kubectl apply -f policy/gatekeeper/constraint.yaml
+
+          echo "⏳ ĐỢI 60 GIÂY để Cosign Provider kịp khởi động và lắng nghe trên cổng 8090..."
+          sleep 60
+
+          echo "=== Kiểm tra trạng thái các Pod bảo mật ==="
+          kubectl get pods -n cosign-system
+          kubectl get pods -n gatekeeper-system
+
       # --- KẾT THÚC KHÔI PHỤC GATEKEEPER ---
 
       - name: Verify deployment

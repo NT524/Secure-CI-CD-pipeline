@@ -47,6 +47,7 @@ jobs:
       # Gom cả 2 file báo cáo nộp lên đám mây lưu trữ
       - name: 5. Upload Semgrep Security Reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: semgrep-security-reports
           path: |
@@ -71,13 +72,14 @@ jobs:
       - name: 2. Run Bandit Scan
         run: |
           pip install bandit
-          # Xuất bản định dạng JSON cho máy đọc
-          bandit -r . -f json -o bandit-report.json || true
+          # 🛠️ ĐÃ SỬA: Thêm cờ -x để né thư mục policy/ và .github/, tránh quét nhầm script hạ tầng của ông và Khôi
+          bandit -r . -x ./policy,./.github -f json -o bandit-report.json || true
           # Xuất bản định dạng HTML cho con người đọc
-          bandit -r . -f html -o bandit-report.html || true
+          bandit -r . -x ./policy,./.github -f html -o bandit-report.html || true
 
       - name: 3. Upload Bandit Security Reports
         uses: actions/upload-artifact@v4
+        if: always() 
         with:
           name: bandit-security-reports
           path: |
@@ -110,13 +112,14 @@ jobs:
         working-directory: app/NodeJS/juice-shop/
         run: |
           npm install
-          # Xuất bản định dạng JSON phục vụ parse tự động
-          npx eslint . --ext .js -f json -o eslint-report.json || true
+          # 🛠️ ĐÃ SỬA: Loại bỏ cờ --ext đã bị khai tử ở ESLint v9 để sửa lỗi gãy lệnh
+          npx eslint . -f json -o eslint-report.json || true
           # Tận dụng formatter có sẵn của eslint để xuất ra trang HTML trực quan
-          npx eslint . --ext .js -f html -o eslint-report.html || true
+          npx eslint . -f html -o eslint-report.html || true
 
       - name: 3. Upload ESLint Security Reports
         uses: actions/upload-artifact@v4
+        if: always() 
         with:
           name: eslint-security-reports
           path: |
@@ -147,6 +150,7 @@ jobs:
 
       - name: 3. Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: checkov-iac-reports
           path: checkov-report*
@@ -175,6 +179,7 @@ jobs:
 
       # Tự động chuyển đổi log JSON thành một trang HTML tĩnh 
       - name: 3. Generate TruffleHog HTML Report
+        if: always()
         run: |
           echo "<html><head><title>TruffleHog Secret Scan Report</title><style>body{font-family:Arial;padding:20px;background:#f4f4f4;}pre{background:#222;color:#fff;padding:15px;border-radius:5px;overflow-x:auto;}</style></head><body>" > trufflehog-report.html
           echo "<h1> TruffleHog Secret Scan Report</h1><p>Dưới đây là danh sách các mã bí mật, API Keys bị phát hiện lộ lọt trong mã nguồn:</p><pre>" >> trufflehog-report.html
@@ -191,6 +196,7 @@ jobs:
       # Gom toàn bộ báo cáo nộp lên hệ thống lưu trữ đám mây Artifacts
       - name: 4. Upload TruffleHog Security Reports
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: trufflehog-secret-reports
           path: |
