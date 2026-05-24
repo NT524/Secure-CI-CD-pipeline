@@ -43,7 +43,7 @@ jobs:
 
       - name: Verify image with public key
         run: |
-          cosign verify --key cosign.pub ${{ inputs.full_image_name }} || { echo "Image signature verification failed!"; exit 1; }
+          cosign verify --key ${{ secrets.COSIGN_PUBLIC_KEY }} ${{ inputs.full_image_name }} || { echo "Image signature verification failed!"; exit 1; }
 
       - name: Install AWS CLI v2
         run: |
