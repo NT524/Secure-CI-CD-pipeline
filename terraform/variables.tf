@@ -23,7 +23,7 @@ variable "ARN_POLICY" {
   type        = string
 }
 
-variable "APP_IMAGE" {
+variable "IMAGE_NAME" {
   description = "Docker image for the application to deploy on EKS"
   type        = string
 }

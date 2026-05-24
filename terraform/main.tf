@@ -133,7 +133,7 @@ resource "null_resource" "ansible_deploy" {
 
   # Trigger này giúp tái kích hoạt Ansible nếu thông tin Image hoặc Namespace thay đổi
   triggers = {
-    app_image     = var.APP_IMAGE # Hoặc biến chứa link ảnh Docker của bạn
+    app_image     = var.IMAGE_NAME # Hoặc biến chứa link ảnh Docker của bạn
     k8s_namespace = var.K8S_NAMESPACE
     always_run    = timestamp() # Bỏ comment dòng này nếu muốn LẦN NÀO terraform apply cũng chạy lại Ansible
   }
@@ -146,7 +146,7 @@ resource "null_resource" "ansible_deploy" {
       AWS_DEFAULT_REGION    = var.aws_region
       CLUSTER_NAME          = "${local.cluster_name}"
       K8S_NAMESPACE         = var.K8S_NAMESPACE
-      APP_IMAGE             = var.APP_IMAGE
+      IMAGE_NAME            = var.IMAGE_NAME
       ENVIRONMENT           = var.environment
     }
 
