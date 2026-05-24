@@ -267,7 +267,6 @@ jobs:
             aws dynamodb wait table-exists --table-name "${{ env.DYNAMODB_TABLE }}" --region "${{ env.AWS_REGION }}"
           fi
 
-      # 🌟 ĐƯA BƯỚC CLEAN LOCK LÊN ĐẦU ĐỂ PHÒNG TRƯỜNG HỢP PIPELINE TRƯỚC BỊ SẬP NGANG
       - name: Clean up Terraform Lock (Nếu có)
         run: |
           aws dynamodb delete-item \
@@ -293,7 +292,6 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="dynamodb_table=${{ env.DYNAMODB_TABLE }}"
 
-      # 🌟 ĐƯA BƯỚC REFRESH LÊN TRƯỚC PLAN ĐỂ DẬP TẮT LỖI RouteAlreadyExists
       - name: Terraform Refresh State
         working-directory: terraform
         run: terraform refresh
@@ -320,17 +318,16 @@ jobs:
           fi
       
       # - name: Terraform destroy (Clean up resources after testing - Optional)
-      #   if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
+      #   if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' }}
       #   working-directory: terraform
       #   env:
       #     TF_VAR_aws_region: ${{ env.AWS_REGION }}
       #     TF_VAR_cluster_name: ${{ env.cluster_name }}
       #   run: terraform destroy -auto-approve
 
-      # 🌟 SỬA LẠI CÚ PHÁP CHẠY FILE PLAN CHUẨN XÁC
       - name: Terraform Apply (Provision EKS)
         working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}}
         run: terraform apply tfplan
 
   Deploy-staging-eks:
@@ -338,13 +335,12 @@ jobs:
     needs: [Infrastructure-provision, build-and-test]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout mã nguồn
+      - name: Checkout Source Code
         uses: actions/checkout@v4
-        
+
       - name: Install Ansible and Kubernetes dependencies
         run: |
           python3 -m pip install --upgrade pip
-          # Cài các gói python cần thiết để Ansible nói chuyện được với AWS và Kubernetes
           pip install ansible boto3 botocore kubernetes 
 
       - name: Install Ansible Collections
@@ -354,13 +350,14 @@ jobs:
 
       - name: Deploy Application to EKS with Ansible
         env:
-          # Truyền toàn bộ biến môi trường vào cho Ansible đọc
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections
           CLUSTER_NAME: "${{env.cluster_name}}-${{ env.ENVIRONMENT }}"
           AWS_REGION: "${{ env.AWS_REGION }}"
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
+          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.cluster_name }}-${{ env.ENVIRONMENT }}
           ansible-playbook ansible/playbooks/deploy-k8s.yml -i ansible/inventory.ini
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
