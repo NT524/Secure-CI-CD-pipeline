@@ -20,8 +20,8 @@ spec:
     spec:
       containers:
         - name: cosign-gatekeeper-provider
-          image: local/cosign-gatekeeper-provider:dev
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8090
           volumeMounts:
