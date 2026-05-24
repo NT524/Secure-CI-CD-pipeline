@@ -338,6 +338,9 @@ jobs:
     needs: [Infrastructure-provision, build-and-test]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@v4
+        
       - name: Install Ansible and Kubernetes dependencies
         run: |
           python3 -m pip install --upgrade pip
