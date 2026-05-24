@@ -355,7 +355,6 @@ jobs:
 
       - name: Deploy Application to EKS with Ansible
         env:
-          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections
           # Truyền toàn bộ biến môi trường vào cho Ansible đọc
           CLUSTER_NAME: "juice-shop-cluster-${{ env.ENVIRONMENT }}"
           AWS_REGION: "us-east-1"
@@ -363,7 +362,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          ansible-playbook ansible/playbooks/deploy-k8s.yml
+          ansible-playbook ansible/playbooks/deploy-k8s.yml -i ansible/inventory.ini
   # dast_scan:
   #   name: OWASP ZAP DAST Scan
   #   runs-on: ubuntu-latest

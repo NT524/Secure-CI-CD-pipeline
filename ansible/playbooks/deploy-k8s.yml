@@ -6,7 +6,7 @@
 
   vars:
     # Ansible sẽ nhận các biến này truyền từ GitHub Actions vào
-    cluster_name: "{{ lookup('env', 'CLUSTER_NAME') }}"
+    cluster_name: "{{ lookup('env', 'cluster_name') }}"
     aws_region: "{{ lookup('env', 'AWS_REGION') }}"
     k8s_namespace: "{{ lookup('env', 'K8S_NAMESPACE') }}"
     app_image: "{{ lookup('env', 'APP_IMAGE') }}"
