@@ -71,6 +71,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 2. Run Bandit Scan
+        working-directory: app/NodeJS/juice-shop/
         run: |
           pip install bandit
           # 🛠️ ĐÃ SỬA: Thêm cờ -x để né thư mục policy/ và .github/, tránh quét nhầm script hạ tầng của ông và Khôi

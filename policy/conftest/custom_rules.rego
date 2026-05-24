@@ -35,7 +35,7 @@ deny contains msg if {
 }
 
 # 4. S3 không được public
-deny[msg] {
+deny contains msg if {
   resource := input.resource_changes[_]
   resource.type == "aws_s3_bucket"
   resource.change.after.acl == "public-read"
