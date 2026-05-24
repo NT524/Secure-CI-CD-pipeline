@@ -224,8 +224,21 @@ jobs:
 
       - name: Apply Gatekeeper policy gate
         run: |
+          echo "🧹 THÊM BƯỚC NÀY: Dọn sạch luật chặn cũ để giải phóng cụm, tránh lỗi tự chặn chính mình (Deadlock)"
+          kubectl delete -f policy/gatekeeper/constraint.yaml --ignore-not-found=true
+          kubectl delete -f policy/gatekeeper/constraint-template.yaml --ignore-not-found=true
+
+          echo "🚀 Tiến hành deploy Pod Provider mới..."
           kubectl apply -f policy/gatekeeper/provider-deployment.yaml
           kubectl apply -f policy/gatekeeper/provider.yaml
+          
+          echo "⏳ ĐỢI 45 GIÂY để Pod Provider mới chính thức lên đĩa và mở cổng 8090..."
+          sleep 45
+
+          echo "=== Kiểm tra trạng thái Pod Provider ==="
+          kubectl get pods -n cosign-system
+
+          echo "🔒 Tái áp dụng luật chặn bảo mật sau khi lính gác đã sống dậy chuẩn chỉ"
           kubectl apply -f policy/gatekeeper/constraint-template.yaml
           for i in $(seq 1 30); do
             if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
@@ -234,13 +247,9 @@ jobs:
             sleep 2
           done
           kubectl apply -f policy/gatekeeper/constraint.yaml
-
-          echo "⏳ ĐỢI 60 GIÂY để Cosign Provider kịp khởi động và lắng nghe trên cổng 8090..."
-          sleep 60
-
-          echo "=== Kiểm tra trạng thái các Pod bảo mật ==="
-          kubectl get pods -n cosign-system
-          kubectl get pods -n gatekeeper-system
+          
+          echo "⏳ Đợi 15 giây để luật kiểm duyệt đồng bộ vào nhân Gatekeeper..."
+          sleep 15
 
       # TIẾN HÀNH ĐẨY APP KHI HỆ THỐNG GÁC CỔNG ĐÃ THÔNG SUỐT MẠNG
       - name: Terraform Apply Plan (Provision EKS)
