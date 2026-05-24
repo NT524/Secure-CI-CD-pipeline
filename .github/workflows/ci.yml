@@ -9,6 +9,8 @@ env:
   S3_REGION: ${{ secrets.S3_REGION }} # Cần khai báo secret này hoặc dùng cứng us-east-1
   DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
   cluster_name: juice-shop-cluster
+  GHCR_PAT: ${{ secrets.GHCR_PAT }} # Personal Access Token để push image lên GitHub Container Registry
+
 
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on: [push, pull_request]
