@@ -46,5 +46,5 @@ output "public_subnets" {
 }
 output "juice_shop_endpoint" {
   description = "The public endpoint of the Juice Shop application"
-  value       = data.kubernetes_service.juice_shop.status.0.load-balancer.0.ingress.0.hostname
+  value       = data.kubernetes_service.juice_shop.status.0.load_balancer.0.ingress.0.hostname
 }
