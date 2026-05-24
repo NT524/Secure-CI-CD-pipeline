@@ -80,18 +80,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Generate SBOM with Syft
-        # install syft and using Syft to generate SBOM
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json
-
-      - name: Upload SBOM Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
-          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
-          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
 
       # 🚀 KHÔI PHỤC: Quét Trivy xuất bản JSON
       - name: Run Trivy Vulnerability Scanner (JSON Output)
@@ -158,6 +146,19 @@ jobs:
         run: |
           docker push ${{ env.IMAGE_NAME }}
           docker push ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
+      
+      - name: Generate SBOM with Syft
+        # install syft and using Syft to generate SBOM
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
+          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
+          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
 
       - name: Sign the published Docker image
         env:
