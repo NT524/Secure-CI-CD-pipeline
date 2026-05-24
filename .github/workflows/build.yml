@@ -1,0 +1,108 @@
+name: 2. Build and Container Security
+
+on:
+  workflow_call:
+    outputs:
+      full_image_name:
+        description: "The full tag of the built image"
+        value: ${{ jobs.build-and-test.outputs.full_image_name }}
+
+jobs:
+  # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
+  build-and-test:
+    name: 3. Build & Test Application
+    # Cập nhật: if: always() đảm bảo chạy dù các luồng trước có warning
+    if: always()
+    runs-on: ubuntu-latest
+    outputs:
+      full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
+
+    # Cấp quyền để ghi vào Container Registry và ký Image (Cần thiết cho tuần 4)
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
+    steps:
+      # Bước 1: Lấy code từ GitHub về cái máy ảo Ubuntu kia
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Bước 2: Setup môi trường
+      # --- Dành cho NodeJS ---
+      - name: 2. Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+
+          # # --- Dành cho Python ---
+      # - name: 2. Setup Python
+      #   uses: actions/setup-python@v4
+      #   with:
+      #     python-version: '3.10'
+
+      # SỬA TẠI ĐÂY: Chuyển tên Repo về chữ thường để tránh lỗi Docker build
+      - name: Prepare Image Name
+        id: prep
+        run: |
+          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME=ghcr.io/${REPO_LOWER}/nodegoat:${{ github.sha }}
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+
+      # Bước 3: Build thử Docker Image
+      - name: 3. Docker build image (Sửa tag để chuẩn bị Push)
+        # Sửa tag nt524 thành đường dẫn GHCR để có thể push và ký
+        working-directory: app/NodeJS/NodeGoat/
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }} .
+
+      # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
+      - name: 4. Generate SBOM with Syft
+        # install syft and using Syft to generate SBOM
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+          syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json
+
+      # Bước 5: THÊM MỚI BƯỚC NÀY ĐỂ LƯU FILE
+      - name: 5. Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
+          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
+          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
+
+      # Bước 6: Quét Image với Trivy (Nhiệm vụ Tuần 3)
+      - name: 6. Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}"
+          format: "table"
+          exit-code: "0" # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
+          ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      # --- CẤU HÌNH BỔ SUNG TUẦN 4: PUSH & SIGN IMAGE (Nhiệm vụ của Trường) ---
+
+      - name: 7. Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 8. Push Docker Image to GHCR
+        run: docker push ${{ env.IMAGE_NAME }}
+
+      - name: 9. Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: 10. Sign the published Docker image
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        run: |
+          echo "$COSIGN_PRIVATE_KEY" > cosign.key
+          cosign sign --key cosign.key ${{ env.IMAGE_NAME }}
+          rm cosign.key

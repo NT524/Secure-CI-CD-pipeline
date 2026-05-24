@@ -1,0 +1,177 @@
+name: 3. Infrastructure Deploy and Gatekeeper
+
+on:
+  workflow_call:
+    inputs:
+      full_image_name:
+        required: true
+        type: string
+
+jobs:
+  # --- CẤU HÌNH BỔ SUNG TUẦN 4: DEPLOY TO STAGING (Nhiệm vụ của Khôi) ---
+  deploy-staging:
+    if: always() # Đảm bảo bước này vẫn chạy dù có lỗi ở các bước trước (ví dụ: quét bảo mật phát hiện lỗ hổng)
+    runs-on: ubuntu-latest
+    env:
+      KUBECONFIG: ${{ github.workspace }}/terraform/kubeconfig
+      namespace: nodegoat-staging
+      cluster_name: nodegoat-cluster
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 3. Pull Image
+        run: |
+          # dockerpull mogo:4.4
+          docker pull ${{ inputs.full_image_name }}
+
+      - name: 4. Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: 5. Setup kind CLI
+        uses: helm/kind-action@v1.10.0
+
+      - name: 6. Build local cosign verification provider image
+        run: |
+          docker build -t local/cosign-gatekeeper-provider:dev policy/cosign-provider
+
+      # --- BẮT ĐẦU PHẦN TỐI ƯU CONFTEST CỦA TRƯỜNG ---
+      - name: 7. Setup Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz
+          tar -xzf conftest_0.50.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+
+      - name: 8. Terraform Plan & Run Conftest Policy Scan
+        env:
+          # Truyền PAT vào để Terraform tạo Secret kéo image
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_app_image: ${{ inputs.full_image_name }}
+          TF_VAR_cluster_name: ${{ env.cluster_name }}
+          TF_VAR_namespace: ${{ env.namespace }}
+        working-directory: terraform
+        run: |
+          terraform init -upgrade 
+          terraform plan -out=tfplan
+          terraform show -json tfplan > tfplan.json
+          conftest test tfplan.json --policy ../policy/conftest/
+
+      - name: 9. Terraform Apply
+        env:
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_app_image: ${{ inputs.full_image_name }}
+          TF_VAR_cluster_name: ${{ env.cluster_name }}
+          TF_VAR_namespace: ${{ env.namespace }}
+        working-directory: terraform
+        run: |
+          # Apply chính xác bản thiết kế tfplan vừa được Conftest quét thành công ở trên
+          terraform apply tfplan
+      # --- KẾT THÚC PHẦN TỐI ƯU ---
+
+      - name: 10. Load provider image into kind
+        run: |
+          kind load docker-image local/cosign-gatekeeper-provider:dev --name ${{ env.cluster_name }}
+
+      - name: 11. Install Gatekeeper with external data enabled
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
+          kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+
+      - name: 12. Sync Cosign public key and registry auth into cluster
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+          printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
+          kubectl -n cosign-system create secret generic cosign-public-key \
+            --from-file=cosign.pub=./cosign.pub \
+            --dry-run=client -o yaml | kubectl apply -f -
+          AUTH=$(printf '%s:%s' "$GHCR_USERNAME" "$GHCR_PAT" | base64 -w0)
+          cat > config.json <<EOF
+          {"auths":{"ghcr.io":{"auth":"$AUTH"}}}
+          EOF
+          kubectl -n cosign-system create secret generic ghcr-registry-auth \
+            --from-file=config.json=./config.json \
+            --dry-run=client -o yaml | kubectl apply -f -
+          rm -f cosign.pub
+          rm -f config.json
+
+      - name: 13. Apply Gatekeeper policy gate
+        run: |
+          kubectl apply -f policy/gatekeeper/provider-deployment.yaml
+          kubectl apply -f policy/gatekeeper/provider.yaml
+          kubectl apply -f policy/gatekeeper/constraint-template.yaml
+          for i in $(seq 1 30); do
+            if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          kubectl apply -f policy/gatekeeper/constraint.yaml
+
+      - name: 14. Deploy Application Manifests
+        env:
+          APP_IMAGE: ${{ inputs.full_image_name }}
+          # Trỏ KUBECONFIG vào file mà Terraform vừa xuất ra
+        run: |
+          # 1. Thay thế biến image vào các file YAML
+          # Lưu ý: Lệnh này tìm chuỗi ${app_image} và thay bằng tag thực tế
+          sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/nodegoat_deployment.yaml
+
+          # 2. Apply database vào namespace riêng
+          kubectl apply -f k8s/mongodb_namespace.yaml
+          kubectl apply -f k8s/mongodb_deployment.yaml
+          kubectl apply -f k8s/mongodb_service.yaml
+
+          # 3. Apply ứng dụng vào namespace staging có policy gate
+          kubectl apply -f k8s/nodegoat_deployment.yaml
+          kubectl apply -f k8s/nodegoat_service.yaml
+
+      - name: 15. Health Check
+        run: |
+
+          echo "--- Trạng thái các Pod ---"
+          kubectl get pods -n nodegoat-data
+          kubectl get pods -n ${{ env.namespace }}
+
+          echo "--- Đợi Deployment hoàn tất ---"
+          # Chờ tối đa 2 phút cho mỗi service
+          kubectl rollout status deployment/mongodb -n nodegoat-data --timeout=120s
+          kubectl rollout status deployment/nodegoat-app -n ${{ env.namespace }} --timeout=120s
+
+          echo "--- Kiểm tra log ứng dụng nếu cần ---"
+          # Lệnh này giúp bạn xem app có kết nối DB thành công không
+          kubectl get svc -n nodegoat-data
+          kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n nodegoat-data
+          kubectl get pods -n ${{ env.namespace }}
+
+      - name: 16. Integration Test (Curl App)
+        run: |
+          kubectl get svc -n nodegoat-data
+          kubectl get svc -n ${{ env.namespace }}
+          kubectl get pods -n nodegoat-data
+          kubectl get pods -n ${{ env.namespace }}
+          kubectl get service/nodegoat-app -n ${{ env.namespace }}
+
+          # echo "--- Đang kiểm tra cổng mạng bên trong Pod ---"
+          # # Kiểm tra xem có dòng nào chứa ':4000' và 'LISTEN' không
+          # if kubectl exec deployment/nodegoat-app -n ${{ env.namespace }} -- netstat -tulpn | grep -q ":4000.*LISTEN"; then
+          #   echo "✅ Node.js đang lắng nghe trên cổng 4000"
+          # else
+          #   echo "❌ Không tìm thấy cổng 4000 đang LISTEN"
+          #   kubectl logs deployment/nodegoat-app -n ${{ env.namespace }} --tail=20
+          #   exit 1
+          # fi
