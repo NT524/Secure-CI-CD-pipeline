@@ -1,171 +1,197 @@
-name: 2. Build and Container Security
+name: 1. Code and IaC Scanning
 
 on:
-  workflow_call:
-    outputs:
-      full_image_name:
-        description: "The full tag of the built image"
-        value: ${{ jobs.build-and-test.outputs.full_image_name }}
+  workflow_call: # Cấu hình để file main có thể gọi được file này
 
 jobs:
-  # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
-  build-and-test:
-    name: Build & Push Application
-    # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
-    # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
-    # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
-      
-
-    if: always()
-    runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
-    outputs:
-      full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
-      current_version: ${{ steps.prep.outputs.VERSION }}
-      current_env: ${{ steps.prep.outputs.ENV }}
-
-    # Cấp quyền để ghi vào Container Registry và ký Image (Cần thiết cho tuần 4)
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      security-events: write # BẮT BUỘC: Thêm quyền này để có thể đẩy file SARIF của Trivy lên Tab Security Web
-
+  # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
+  terraform-check:
+    name: 1. Terraform Validation
+    runs-on: ubuntu-latest
     steps:
-      # Bước 1: Lấy code từ GitHub về cái máy ảo Ubuntu kia
-      - name: Checkout Source Code
+      - name: 1. Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: app/NodeJS/juice-shop/package.json
+      - name: 2. Setup Terraform
+        uses: hashicorp/setup-terraform@v3
 
-      - name: Prepare Image Name & Environment
-        id: prep
+      - name: 3. Terraform Init & Validate
         run: |
+          cd terraform
+          terraform init
+          terraform validate
 
-          
-          ENVIRONMENT=${{ env.ENVIRONMENT }}
-          echo "ENV=${ENVIRONMENT}" >> $GITHUB_OUTPUT
-          
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "REPO_LOWER=${REPO_LOWER}" >> $GITHUB_ENV
-          VERSION_TAG="${{ github.sha }}"
-          IMAGE_NAME=ghcr.io/${REPO_LOWER}/juice-shop:${VERSION_TAG}-${ENVIRONMENT}
-          
-          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
-          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          echo "VERSION=${VERSION_TAG}" >> $GITHUB_OUTPUT
-          
-      
+  # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
+  semgrep-scan:
+    name: 2a. Semgrep (Multi-rules)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
 
-      - name: Thiết lập Docker Buildx (BuildKit)
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      # Cài đặt Semgrep CLI trực tiếp lên máy ảo để chạy lệnh linh hoạt
+      - name: 2. Install Semgrep CLI
+        run: pip install semgrep
 
-      - name: Build và Push Image
-        uses: docker/build-push-action@v5
-        with:
-          context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}
-            ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Bước 4: Tạo SBOM với Syft (Nhiệm vụ Tuần 3)
-      - name: Generate SBOM with Syft
-        # install syft and using Syft to generate SBOM
+      # Chạy quét và xuất bản SARIF (JSON tiêu chuẩn của GitHub)
+      - name: 3. Run Semgrep (SARIF Format)
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --sarif -o semgrep-report.sarif || true
 
-      # Bước 5: THÊM MỚI BƯỚC NÀY ĐỂ LƯU FILE
-      - name: Upload SBOM Artifact
+      # SỬA TẠI ĐÂY: Chuyển sang xuất dạng text
+      - name: 4. Generate Semgrep Text Report
+        run: |
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --text -o semgrep-report.txt || true
+
+      # Gom cả 2 file báo cáo nộp lên đám mây lưu trữ
+      - name: 5. Upload Semgrep Security Reports
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
-          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
-          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa 
+          name: semgrep-security-reports
+          path: |
+            semgrep-report.sarif
+            semgrep-report.txt
 
-      # Bước 6: Quét Image với Trivy (Nhiệm vụ Tuần 3) - CẤU HÌNH ĐA ĐỊNH DẠNG BÁO CÁO
-      - name: Run Trivy Vulnerability Scanner (JSON Output)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          format: "json"
-          output: "trivy-report.json"
-          exit-code: "0" # Nếu Trivy phát hiện lỗ hỏng mức HIGH hoặc CRITICAl, nó sẽ trả về mã lỗi 1
-          ignore-unfixed: true # Báo các lỗ hỏng đã có bản vá
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
-
-      - name: Run Trivy Vulnerability Scanner (HTML Output)
-        run: |
-          # 1. Tạo một thư mục tạm trên máy ảo và tải file template HTML xịn của hãng về
-          mkdir -p trivy-templates
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-templates/html.tpl
-          
-          # 2. Sử dụng đúng tên image aquasec/trivy:latest để quét và ép render ra file HTML
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD:/root/workspace \
-            aquasec/trivy:latest image \
-            --format template \
-            --template "@/root/workspace/trivy-templates/html.tpl" \
-            --output /root/workspace/trivy-report.html \
-            --severity CRITICAL,HIGH \
-            --ignore-unfixed \
-            ${{ env.IMAGE_NAME }}
-
-      # CẬP NHẬT MỚI THÊM: Quét thêm định dạng SARIF bằng Docker CLI để lấy file thông dịch cho GitHub Web
-      - name: Run Trivy Vulnerability Scanner (SARIF Format)
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD:/root/workspace \
-            aquasec/trivy:latest image \
-            --format sarif \
-            --output /root/workspace/trivy-report.sarif \
-            --severity CRITICAL,HIGH \
-            --ignore-unfixed \
-            ${{ env.IMAGE_NAME }}
-
-      # CẬP NHẬT MỚI THÊM: Sử dụng Github CodeQL Action chính chủ để đẩy lỗi Container lên Tab Security Web
-      - name: Upload Trivy SARIF to GitHub Security Tab
+      #  Đổi đường dẫn dùng github/codeql-action/upload-sarif@v4
+      - name: 6. Upload Semgrep SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
-          sarif_file: trivy-report.sarif
+          sarif_file: semgrep-report.sarif
 
-      - name: Upload Trivy Security Reports
+  python-scan:
+    name: 2b. Bandit (Python SAST)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run Bandit Scan
+        run: |
+          pip install bandit
+          # Xuất bản định dạng JSON cho máy đọc
+          bandit -r . -f json -o bandit-report.json || true
+          # Xuất bản định dạng HTML cho con người đọc
+          bandit -r . -f html -o bandit-report.html || true
+
+      - name: 3. Upload Bandit Security Reports
         uses: actions/upload-artifact@v4
         with:
-          name: trivy-container-reports
+          name: bandit-security-reports
           path: |
-            trivy-report.json
-            trivy-report.html
-            trivy-report.sarif
+            bandit-report.json
+            bandit-report.html
 
-      # --- CẤU HÌNH BỔ SUNG TUẦN 4: PUSH & SIGN IMAGE (Nhiệm vụ của Trường) ---
+  # --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
+  #  golang-scan:
+  #    name: 2c. Gosec (Go SAST)
+  #    needs: terraform-check
+  #    runs-on: ubuntu-latest
+  #    steps:
+  #      - name: 1. Checkout Source Code
+  #        uses: actions/checkout@v4
+  #      - name: 2. Run Gosec Security Scan
+  #        uses: securego/gosec@master
+  #        with:
+  #          args: ./...
 
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+  javascript-scan:
+    name: 2d. ESLint (JS Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
 
-      - name: Sign the published Docker image
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+      - name: 2. Run ESLint Scan
+        working-directory: app/NodeJS/NodeGoat/
         run: |
-          echo "$COSIGN_PRIVATE_KEY" > cosign.key
-          cosign sign --yes --key cosign.key ${{ env.IMAGE_NAME }}
-          rm cosign.key
+          npm install
+          # Xuất bản định dạng JSON phục vụ parse tự động
+          npx eslint . --ext .js -f json -o eslint-report.json || true
+          # Tận dụng formatter có sẵn của eslint để xuất ra trang HTML trực quan
+          npx eslint . --ext .js -f html -o eslint-report.html || true
+
+      - name: 3. Upload ESLint Security Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: eslint-security-reports
+          path: |
+            app/NodeJS/NodeGoat/eslint-report.json
+            app/NodeJS/NodeGoat/eslint-report.html
+
+  # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
+  iac-scan:
+    name: 2e. Checkov (IaC Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run Checkov Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          # Quét thư mục gốc "." để bắt được cả file Terraform lẫn Kubernetes trong thư mục k8s/
+          directory: .
+          # Bỏ cấu hình cứng framework để Checkov tự động nhận diện cả Terraform lẫn K8s Manifests
+          skip_check: CKV2_AWS_11,CKV2_AWS_12
+          skip_path: policy/,.github/workflows/
+          # Cấu hình Checkov xuất bản song song nhiều định dạng báo cáo
+          output_format: json,sarif
+          output_file_path: checkov-report
+          soft_fail: true
+
+      - name: 3. Upload Checkov Security Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-iac-reports
+          path: checkov-report*
+
+      - name: 4. Upload Checkov SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: checkov-report/results_sarif.sarif 
+
+  # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
+  secret-scan:
+    name: 2f. TruffleHog (Secret Scanning)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Bắt buộc lấy toàn bộ lịch sử commit để TruffleHog quét sâu quá khứ
+
+      # Dùng Docker chính chủ quét hệ thống file và xuất bản JSON cho máy đọc
+      - name: 2. Run TruffleHog Scan (JSON Output)
+        run: |
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json || true
+
+      # Tự động chuyển đổi log JSON thành một trang HTML tĩnh 
+      - name: 3. Generate TruffleHog HTML Report
+        run: |
+          echo "<html><head><title>TruffleHog Secret Scan Report</title><style>body{font-family:Arial;padding:20px;background:#f4f4f4;}pre{background:#222;color:#fff;padding:15px;border-radius:5px;overflow-x:auto;}</style></head><body>" > trufflehog-report.html
+          echo "<h1> TruffleHog Secret Scan Report</h1><p>Dưới đây là danh sách các mã bí mật, API Keys bị phát hiện lộ lọt trong mã nguồn:</p><pre>" >> trufflehog-report.html
+          
+          # Nếu file json trống hoặc không có lỗi, ghi nhận an toàn
+          if [ -s trufflehog-report.json ]; then
+            cat trufflehog-report.json >> trufflehog-report.html
+          else
+            echo "Chúc mừng! Không tìm thấy thông tin nhạy cảm nào bị lộ lọt (No secrets found)." >> trufflehog-report.html
+          fi
+          
+          echo "</pre></body></html>" >> trufflehog-report.html
+
+      # Gom toàn bộ báo cáo nộp lên hệ thống lưu trữ đám mây Artifacts
+      - name: 4. Upload TruffleHog Security Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: trufflehog-secret-reports
+          path: |
+            trufflehog-report.json
+            trufflehog-report.html
