@@ -34,20 +34,6 @@ jobs:
           terraform init
           terraform validate
 
-      # --- BƯỚC TÍCH HỢP CONFTEST (IaC Policy Scan) ---
-      - name: 4. Setup Conftest
-        run: |
-          wget https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz
-          tar -xzf conftest_0.50.0_Linux_x86_64.tar.gz
-          sudo mv conftest /usr/local/bin
-
-      - name: 5. Run Conftest Policy Scan
-        run: |
-          cd terraform
-          terraform plan -out=tfplan
-          terraform show -json tfplan > tfplan.json
-          conftest test tfplan.json --policy ../policy/conftest/
-
   # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
   semgrep-scan:
     name: 2a. Semgrep (Multi-rules)
@@ -253,7 +239,14 @@ jobs:
         run: |
           docker build -t local/cosign-gatekeeper-provider:dev policy/cosign-provider
 
-      - name: 7. Terraform Apply
+      # --- BẮT ĐẦU PHẦN TỐI ƯU CONFTEST CỦA TRƯỜNG ---
+      - name: 7. Setup Conftest
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz
+          tar -xzf conftest_0.50.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+
+      - name: 8. Terraform Plan & Run Conftest Policy Scan
         env:
           # Truyền PAT vào để Terraform tạo Secret kéo image
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
@@ -261,16 +254,29 @@ jobs:
           TF_VAR_cluster_name: ${{ env.cluster_name }}
           TF_VAR_namespace: ${{ env.namespace }}
         working-directory: terraform
-
         run: |
           terraform init -upgrade 
-          terraform apply -auto-approve
+          terraform plan -out=tfplan
+          terraform show -json tfplan > tfplan.json
+          conftest test tfplan.json --policy ../policy/conftest/
 
-      - name: 8. Load provider image into kind
+      - name: 9. Terraform Apply
+        env:
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_app_image: ${{ needs.build-and-test.outputs.full_image_name }}
+          TF_VAR_cluster_name: ${{ env.cluster_name }}
+          TF_VAR_namespace: ${{ env.namespace }}
+        working-directory: terraform
+        run: |
+          # Apply chính xác bản thiết kế tfplan vừa được Conftest quét thành công ở trên
+          terraform apply tfplan
+      # --- KẾT THÚC PHẦN TỐI ƯU ---
+
+      - name: 10. Load provider image into kind
         run: |
           kind load docker-image local/cosign-gatekeeper-provider:dev --name ${{ env.cluster_name }}
 
-      - name: 9. Install Gatekeeper with external data enabled
+      - name: 11. Install Gatekeeper with external data enabled
         run: |
           kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
           kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
@@ -278,7 +284,7 @@ jobs:
           kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
           kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
 
-      - name: 10. Sync Cosign public key and registry auth into cluster
+      - name: 12. Sync Cosign public key and registry auth into cluster
         env:
           COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
           GHCR_USERNAME: ${{ github.actor }}
@@ -299,7 +305,7 @@ jobs:
           rm -f cosign.pub
           rm -f config.json
 
-      - name: 11. Apply Gatekeeper policy gate
+      - name: 13. Apply Gatekeeper policy gate
         run: |
           kubectl apply -f policy/gatekeeper/provider-deployment.yaml
           kubectl apply -f policy/gatekeeper/provider.yaml
@@ -312,7 +318,7 @@ jobs:
           done
           kubectl apply -f policy/gatekeeper/constraint.yaml
 
-      - name: 12. Deploy Application Manifests
+      - name: 14. Deploy Application Manifests
         env:
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
           # Trỏ KUBECONFIG vào file mà Terraform vừa xuất ra
@@ -330,7 +336,7 @@ jobs:
           kubectl apply -f k8s/nodegoat_deployment.yaml
           kubectl apply -f k8s/nodegoat_service.yaml
 
-      - name: 13. Health Check
+      - name: 15. Health Check
         run: |
 
           echo "--- Trạng thái các Pod ---"
@@ -349,7 +355,7 @@ jobs:
           kubectl get pods -n nodegoat-data
           kubectl get pods -n ${{ env.namespace }}
 
-      - name: 14. Integration Test (Curl App)
+      - name: 16. Integration Test (Curl App)
         run: |
           kubectl get svc -n nodegoat-data
           kubectl get svc -n ${{ env.namespace }}
