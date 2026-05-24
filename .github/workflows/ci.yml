@@ -303,6 +303,7 @@ jobs:
           echo "TF_VAR_ARN_POLICY=${{ secrets.ARN_POLICY }}" >> $GITHUB_ENV
           echo "TF_VAR_IMAGE_NAME=${{ needs.build-and-test.outputs.full_image_name }}" >> $GITHUB_ENV
           echo "TF_VAR_K8S_NAMESPACE=${{ env.K8S_NAMESPACE }}" >> $GITHUB_ENV
+          echo "TF_VAR_GHCR_PAT=${{ secrets.GHCR_PAT }}" >> $GITHUB_ENV
           echo "TF_IN_AUTOMATION=1" >> $GITHUB_ENV
 
       - name: Terraform Init
