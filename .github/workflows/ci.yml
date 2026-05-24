@@ -13,23 +13,29 @@ on:
       - "feature/terraform"
       - "policy_gate_v2"
   pull_request:
-    branches: ["main"] # Chạy khi có ai đó tạo Pull Request đòi gộp code vào main
+    branches: ["main"]
+
+# BỔ SUNG QUAN TRỌNG: Cấp quyền ở file Mẹ để ủy quyền xuống cho các file Con
+permissions:
+  contents: read
+  packages: write
+  id-token: write
 
 jobs:
-  # Gọi file Scan chạy đầu tiên
-  trigger-scan:
+  # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
+  Scan:
     uses: ./.github/workflows/scan.yml
 
   # Gọi file Build chạy sau khi Scan xong
-  trigger-build:
-    needs: trigger-scan
+  Build:
+    needs: Scan
     uses: ./.github/workflows/build.yml
     secrets: inherit # Kế thừa các secret từ repo
 
   # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
-  trigger-deploy:
-    needs: trigger-build
+  Deploy:
+    needs: Build
     uses: ./.github/workflows/deploy.yml
     with:
-      full_image_name: ${{ needs.trigger-build.outputs.full_image_name }}
+      full_image_name: ${{ needs.Build.outputs.full_image_name }}
     secrets: inherit
