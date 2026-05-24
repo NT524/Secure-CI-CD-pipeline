@@ -1,5 +1,4 @@
 package main
-package terraform.S3
 import rego.v1
 
 # 1. Luật cấm sử dụng các loại instance quá lớn
