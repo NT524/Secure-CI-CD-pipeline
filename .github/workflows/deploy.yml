@@ -38,6 +38,12 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Verify image with public key
+        run: |
+          cosign verify --key cosign.pub ${{ inputs.full_image_name }} || { echo "Image signature verification failed!"; exit 1; }
 
       - name: Install AWS CLI v2
         run: |
