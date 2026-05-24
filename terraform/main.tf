@@ -173,3 +173,5 @@ data "kubernetes_service" "juice_shop" {
     namespace = var.K8S_NAMESPACE
   }
 }
+
+
