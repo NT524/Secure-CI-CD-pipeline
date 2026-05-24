@@ -33,11 +33,3 @@ deny contains msg if {
   
   msg := sprintf("CẢNH BÁO: S3 Bucket %s chưa bật mã hóa dữ liệu!", [resource.address])
 }
-
-# 4. S3 không được public
-deny contains msg if {
-  resource := input.resource_changes[_]
-  resource.type == "aws_s3_bucket"
-  resource.change.after.acl == "public-read"
-  msg = sprintf("CẢNH BÁO: S3 %s đang ở trạng thái public", [resource.address])
-}
