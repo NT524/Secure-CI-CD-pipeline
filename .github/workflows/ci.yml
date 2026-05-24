@@ -353,6 +353,7 @@ jobs:
           ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections
           CLUSTER_NAME: "${{env.cluster_name}}-${{ env.ENVIRONMENT }}"
           AWS_REGION: "${{ env.AWS_REGION }}"
+          K8S_NAMESPACE: "${{ env.K8S_NAMESPACE }}"
           APP_IMAGE: ${{ needs.build-and-test.outputs.full_image_name }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
