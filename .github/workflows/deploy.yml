@@ -193,7 +193,7 @@ jobs:
         env:
           COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
           GHCR_USERNAME: ${{ github.actor }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }} 
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
           
@@ -203,6 +203,10 @@ jobs:
             --from-file=cosign.pub=./cosign.pub \
             --dry-run=client -o yaml | kubectl apply -f -
           
+          # 2. 🛠️ THÊM DÒNG NÀY: Xóa cứng Secret cũ đang bị kẹt định dạng để tránh lỗi "field is immutable"
+          kubectl -n cosign-system delete secret ghcr-registry-auth --ignore-not-found=true
+
+          # 3. Tiến hành đúc Secret định dạng docker-registry mới tinh hoàn toàn hợp lệ
           kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
             --docker-server=ghcr.io \
             --docker-username="$GHCR_USERNAME" \
