@@ -281,6 +281,7 @@ jobs:
           echo TF_VAR_cluster_name="${{ env.cluster_name }}" >> $GITHUB_ENV
           echo "TF_VAR_environment=${{ env.ENVIRONMENT }}" >> $GITHUB_ENV
           echo "TF_VAR_ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}" >> $GITHUB_ENV
+          echo "TF_VAR_ARN_POLICY=${{ secrets.ARN_POLICY }}" >> $GITHUB_ENV
           echo "TF_IN_AUTOMATION=1" >> $GITHUB_ENV
 
       - name: Terraform Init

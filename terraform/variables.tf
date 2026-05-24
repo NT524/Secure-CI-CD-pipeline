@@ -18,3 +18,7 @@ variable "ARN_IAM_USER" {
   description = "ARN of the IAM User or Role that GitHub Actions will use for authentication"
   type        = string
 }
+variable "ARN_POLICY" {
+  description = "ARN of the IAM Policy to associate with the GitHub Actions principal for cluster access"
+  type        = string
+}
