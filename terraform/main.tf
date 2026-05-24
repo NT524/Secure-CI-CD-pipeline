@@ -159,6 +159,8 @@ resource "null_resource" "ansible_deploy" {
       echo "=== [Terraform Local-Exec] Bắt đầu kích hoạt Ansible Playbook ==="
       ansible-playbook ${path.cwd}/../ansible/playbooks/deploy-k8s.yml \
         -i ${path.cwd}/../ansible/inventory.ini \
+        -e "tf_var_k8s_namespace=${var.K8S_NAMESPACE}" \
+        -e "tf_var_image_name=${var.IMAGE_NAME}"
 
     EOT
   }

@@ -6,8 +6,8 @@
 
   vars:
     # Ansible sẽ nhận các biến này truyền từ GitHub Actions vào
-    k8s_namespace: "{{ lookup('env', 'K8S_NAMESPACE') }}"
-    app_image: "{{ lookup('env', 'IMAGE_NAME') }}"
+    k8s_namespace: "{{tf_var_k8s_namespace}}"
+    app_image: "{{tf_var_image_name}}"
 
   tasks:
   - name: Create Kubernetes Namespace using kubectl
