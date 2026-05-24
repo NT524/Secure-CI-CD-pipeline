@@ -356,6 +356,13 @@ jobs:
         working-directory: terraform
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '0'}} 
         run: terraform apply -auto-approve
+
+      - name: Verify deployment
+        run: |
+          SVC_NAME=$(terraform output -raw juice_shop_endpoint)
+          kubectl rollout status deployment/"$SVC_NAME" -n ${{env.K8S_NAMESPACE}} --timeout=300s
+          kubectl get svc "$SVC_NAME" -n ${{env.K8S_NAMESPACE}} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+  
         
 
 

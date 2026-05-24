@@ -165,3 +165,11 @@ resource "null_resource" "ansible_deploy" {
     EOT
   }
 }
+
+data "kubernetes_service" "juice_shop" {
+  depends_on = [null_resource.ansible_deploy]
+  metadata {
+    name      = "juice-shop"
+    namespace = var.K8S_NAMESPACE
+  }
+}
