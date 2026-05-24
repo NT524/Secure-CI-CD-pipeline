@@ -155,15 +155,11 @@ resource "null_resource" "ansible_deploy" {
       echo "=== [Terraform Local-Exec] Đang cấu hình Kubeconfig ==="
       aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $CLUSTER_NAME
 
-      echo "=== [Terraform Local-Exec] Đang trích xuất Token xác thực chuẩn ==="
-      K8S_AUTH_TOKEN=$(aws eks get-token --cluster-name $CLUSTER_NAME --region $AWS_DEFAULT_REGION --output json | jq -r '.status.token')
-      K8S_AUTH_HOST=$(aws eks describe-cluster --name $CLUSTER_NAME --region $AWS_DEFAULT_REGION --output json | jq -r '.cluster.endpoint')
 
       echo "=== [Terraform Local-Exec] Bắt đầu kích hoạt Ansible Playbook ==="
       ansible-playbook ${path.cwd}/../ansible/playbooks/deploy-k8s.yml \
         -i ${path.cwd}/../ansible/inventory.ini \
-        -e "k8s_auth_token=$K8S_AUTH_TOKEN" \
-        -e "k8s_auth_host=$K8S_AUTH_HOST"
+
     EOT
   }
 }
