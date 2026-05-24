@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 name: 🧪 Test Isolation - SSH Remote Deploy
 
 # Cấu hình trigger thủ công: Giúp em có thể chủ động bấm nút "Run workflow" trên giao diện GitHub Actions để test đi test lại
@@ -77,3 +78,76 @@ jobs:
             sudo kubectl rollout status deployment/nodegoat-app -n nodegoat-staging --timeout=90s
             
             echo "🎉 [SUCCESS] Chúc mừng Khôi! Module SSH Deployment đã chạy thành công tuyệt đối!"
+=======
+name: Test SSH Connectivity and Deploy to K3s
+on:
+  workflow_dispatch:
+env:
+  TARGET_IP: "100.31.120.61"
+jobs:
+  deploy-app-k3s:
+    name: 5. Deploy Manifests to K3s Cluster
+    runs-on: ubuntu-latest
+    outputs:
+      staging_url: "http://${{ env.TARGET_IP }}"
+    
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Kiểm tra trạng thái thông mạch cổng SSH (22) trên AWS
+        run: |
+          echo "🔍 Đang thăm dò kết nối tới địa chỉ AWS: ${{ env.TARGET_IP }}..."
+          for i in {1..12}; do
+            if nc -zv -w 3 ${{ env.TARGET_IP }} 22; then
+              echo "✅ [SUCCESS] Cổng SSH đã mở hoàn toàn! Sẵn sàng bàn giao cho Runner deploy."
+              exit 0
+            fi
+            echo "⏳ Cổng SSH (22) phản hồi từ chối. Server đang load OS, chờ 5 giây (Lần thử $i/12)..."
+            sleep 5
+          done
+          exit 1
+
+      - name: 3. Deploy Kubernetes Manifests via SSH Remote
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_IMAGE: ghcr.io/nt524/secure-ci-cd-pipeline/juice-shop:latest@sha256:38093d299d6523cb17f1833ee9889cfc189a2a40dd94067a72db89d88be915e7
+          K8S_NAMESPACE: isolated-staging
+        with:
+          host: ${{ env.TARGET_IP }}
+          username: ubuntu
+          key: ${{ secrets.AWS_EC2_SSH_KEY }}
+          envs: APP_IMAGE, K8S_NAMESPACE
+          script_stop: true # 🌟 ÉP BUỘC GÃY ĐỂ ĐÈ BUG
+          script: |
+            echo "=== [BƯỚC 1] KẾT NỐI VÀ KIỂM TRA HỆ THỐNG K3S ==="
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            
+            for i in {1..15}; do
+              if kubectl get nodes > /dev/null 2>&1; then break; fi
+              sleep 5
+            done
+            
+            echo "=== [BƯỚC 2] TẢI MÃ NGUỒN MANIFESTS ==="
+            rm -rf app
+            git clone https://github.com/${{ github.repository }}.git -b ${{ github.ref_name }} app
+            cd app
+            
+            echo "=== [BƯỚC 3] DỌN DẸP APP CŨ ==="
+            kubectl delete deployment juice-shop -n $K8S_NAMESPACE --ignore-not-found=true
+            kubectl delete svc juice-shop-service -n $K8S_NAMESPACE --ignore-not-found=true
+            
+            echo "=== [BƯỚC 4] TRIỂN KHAI JUICE SHOP ==="
+            kubectl create namespace $K8S_NAMESPACE --dry-run=client -o yaml | kubectl apply -f -
+            sleep 15
+            
+            # Khớp token biến động trong file juice-shop.yaml
+            sed -i "s|\${app_image}|$APP_IMAGE|g" k8s/juice-shop.yaml
+            sed -i "s|\${k8s_namespace}|$K8S_NAMESPACE|g" k8s/juice-shop.yaml
+            
+            kubectl apply -f k8s/juice-shop.yaml --validate=false
+            
+            echo "=== [BƯỚC 5] CẬP NHẬT TRẠNG THÁI POD ==="
+            kubectl rollout restart deployment/juice-shop -n $K8S_NAMESPACE || true
+            kubectl rollout status deployment/juice-shop -n $K8S_NAMESPACE --timeout=120s
+>>>>>>> feature/juice-shop
