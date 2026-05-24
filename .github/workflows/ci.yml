@@ -346,15 +346,16 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           # Cài các gói python cần thiết để Ansible nói chuyện được với AWS và Kubernetes
-          pip install ansible boto3 botocore kubernetes
+          pip install ansible boto3 botocore kubernetes 
 
       - name: Install Ansible Collections
         run: |
-          ansible-galaxy collection install amazon.aws
-          ansible-galaxy collection install kubernetes.core
+          mkdir -p ansible/collections
+          ansible-galaxy collection install amazon.aws kubernetes.core -p ansible/collections
 
       - name: Deploy Application to EKS with Ansible
         env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}/ansible/collections
           # Truyền toàn bộ biến môi trường vào cho Ansible đọc
           CLUSTER_NAME: "juice-shop-cluster-${{ env.ENVIRONMENT }}"
           AWS_REGION: "us-east-1"
