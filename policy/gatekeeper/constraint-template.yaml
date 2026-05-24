@@ -1,0 +1,134 @@
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredimagesignatures
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredImageSignatures
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            provider:
+              type: string
+            exemptImages:
+              type: array
+              items:
+                type: string
+            requiredRepositoryPrefixes:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package k8srequiredimagesignatures
+
+        import future.keywords.if
+        import future.keywords.in
+
+        violation[{"msg": msg}] {
+          image := relevant_images[_]
+          response := provider_response(image)
+          count(response.errors) > 0
+          msg := sprintf("Xác thực chữ ký thất bại cho image %q: lỗi từ nhà cung cấp: %v", [image, response.errors])
+        }
+
+        violation[{"msg": msg}] {
+          image := relevant_images[_]
+          response := provider_response(image)
+          count(object.get(response, "system_error", "")) > 0
+          msg := sprintf("Xác thực chữ ký thất bại cho image %q: %s", [image, response.system_error])
+        }
+
+        violation[{"msg": msg}] {
+          image := relevant_images[_]
+          response := provider_response(image)
+          result := response.responses[_]
+          result[0] == image
+          result[2] != ""
+          msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, result[2]])
+        }
+
+        violation[{"msg": msg}] {
+          image := relevant_images[_]
+          response := provider_response(image)
+          count(response.errors) == 0
+          count(object.get(response, "system_error", "")) == 0
+          result := response.responses[_]
+          result[0] == image
+          verified := object.get(result[1], "verified", false)
+          not verified
+          detail := object.get(result[1], "message", "Cosign không thể xác thực chữ ký")
+          msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, detail])
+        }
+
+        violation[{"msg": msg}] {
+          image := relevant_images[_]
+          response := provider_response(image)
+          count(response.errors) == 0
+          count(object.get(response, "system_error", "")) == 0
+          not has_response_for_image(response, image)
+          msg := sprintf("Image %q bị từ chối vì nhà cung cấp dịch vụ xác thực Cosign không trả về quyết định", [image])
+        }
+
+        relevant_images[image] {
+          image := all_images[_]
+          should_verify(image)
+          not is_exempt(image)
+        }
+
+        all_images[image] {
+          spec := pod_spec
+          container := object.get(spec, "containers", [])[_]
+          image := container.image
+        }
+
+        all_images[image] {
+          spec := pod_spec
+          container := object.get(spec, "initContainers", [])[_]
+          image := container.image
+        }
+
+        should_verify(image) {
+          prefixes := object.get(input.parameters, "requiredRepositoryPrefixes", [])
+          count(prefixes) == 0
+        }
+
+        should_verify(image) {
+          prefixes := object.get(input.parameters, "requiredRepositoryPrefixes", [])
+          prefix := prefixes[_]
+          startswith(image, prefix)
+        }
+
+        is_exempt(image) {
+          exempt := object.get(input.parameters, "exemptImages", [])
+          pattern := exempt[_]
+          startswith(image, trim_suffix(pattern, "*"))
+        }
+
+        provider_response(image) := response {
+          response := external_data({
+            "provider": object.get(input.parameters, "provider", "cosign-gatekeeper-provider"),
+            "keys": [image],
+          })
+        }
+
+        has_response_for_image(response, image) {
+          result := response.responses[_]
+          result[0] == image
+        }
+
+        pod_spec := input.review.object.spec if {
+          input.review.kind.kind == "Pod"
+        }
+
+        pod_spec := input.review.object.spec.template.spec if {
+          input.review.kind.kind in {"Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job"}
+        }
+
+        pod_spec := input.review.object.spec.jobTemplate.spec.template.spec if {
+          input.review.kind.kind == "CronJob"
+        }

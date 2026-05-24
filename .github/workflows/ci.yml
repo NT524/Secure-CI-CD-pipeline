@@ -1,0 +1,59 @@
+name: DevSecOps Integrated Pipeline
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  K8S_NAMESPACE: isolated-staging
+  NODE_VERSION: 24
+  AWS_REGION: us-east-1
+  ENVIRONMENT: staging
+  S3_BUCKET: ${{ secrets.S3_BUCKET }}
+  S3_REGION: ${{ secrets.S3_REGION }} # Cần khai báo secret này hoặc dùng cứng us-east-1
+  DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
+  cluster_name: juice-shop-cluster
+
+# 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
+on:
+  push:
+    branches:
+      - "main"
+      - "dev"
+      - "feature/docker_build"
+      - "feature/integration"
+      - "feature/terraform"
+      - "policy_gate_v2"
+  pull_request:
+    branches: ["main"]
+
+  workflow_dispatch: # Cho phép chạy thủ công từ tab Actions của GitHub
+  
+# BỔ SUNG QUAN TRỌNG: Cấp quyền ở file Mẹ để ủy quyền xuống cho các file Con
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
+  issues: write
+
+jobs:
+  # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
+  Scan:
+    uses: ./.github/workflows/scan.yml
+
+  # Gọi file Build chạy sau khi Scan xong
+  Build:
+    # needs: Scan
+    if: always()
+    uses: ./.github/workflows/build.yml
+    secrets: inherit # Kế thừa các secret từ repo
+
+  # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
+  Deploy:
+    needs: Build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      full_image_name: ${{ needs.Build.outputs.full_image_name }}
+    secrets: inherit
+
+  Dast-scan:
+    needs: Deploy
+    uses: ./.github/workflows/zap.yml
+    secrets: inherit

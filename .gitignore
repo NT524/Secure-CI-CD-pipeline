@@ -1,0 +1,15 @@
+*.terraform/
+# *.pem
+# *.key
+# *.crt
+*.tfstate*
+*terraform.lock.hcl
+.venv
+logs.log
+.md
+Test/*
+*.key
+*.tfstate.backup
+*dir_tree*
+*sbom.spdx.json
+app/NodeJS/*/.github/*

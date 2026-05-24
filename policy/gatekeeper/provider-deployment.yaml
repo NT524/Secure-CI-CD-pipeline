@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cosign-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosign-gatekeeper-provider
+  namespace: cosign-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cosign-gatekeeper-provider
+  template:
+    metadata:
+      labels:
+        app: cosign-gatekeeper-provider
+    spec:
+      imagePullSecrets:
+        - name: ghcr-registry-auth
+      containers:
+        - name: cosign-gatekeeper-provider
+          image: ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8090
+          volumeMounts:
+            - name: cosign-key
+              mountPath: /keys
+              readOnly: true
+            - name: registry-auth
+              mountPath: /root/.docker
+              readOnly: true
+      volumes:
+        - name: cosign-key
+          secret:
+            secretName: cosign-public-key
+        # 🛠️ ĐÃ SỬA: Ánh xạ chuẩn từ định dạng K8s (.dockerconfigjson) sang file config.json truyền thống
+        - name: registry-auth
+          secret:
+            secretName: ghcr-registry-auth
+            items:
+              - key: .dockerconfigjson
+                path: config.json
+            optional: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cosign-gatekeeper-provider
+  namespace: cosign-system
+spec:
+  selector:
+    app: cosign-gatekeeper-provider
+  ports:
+    - port: 8090
+      targetPort: 8090

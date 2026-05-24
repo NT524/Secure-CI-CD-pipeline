@@ -1,0 +1,212 @@
+name: 1. Code and IaC Scanning
+
+on:
+  workflow_call: # Cấu hình để file main có thể gọi được file này
+
+jobs:
+  # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
+  terraform-check:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: 3. Terraform Init & Validate
+        run: |
+          cd terraform
+          terraform init -backend=false -input=false -upgrade
+          terraform validate
+
+
+  # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
+  semgrep-scan:
+    name: Semgrep (Multi-rules)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Cài đặt Semgrep CLI trực tiếp lên máy ảo để chạy lệnh linh hoạt
+      - name: 2. Install Semgrep CLI
+        run: pip install semgrep
+
+      # Chạy quét và xuất bản SARIF (JSON tiêu chuẩn của GitHub)
+      - name: 3. Run Semgrep (SARIF Format)
+        run: |
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --sarif -o semgrep-report.sarif || true
+
+      # SỬA TẠI ĐÂY: Chuyển sang xuất dạng text
+      - name: 4. Generate Semgrep Text Report
+        run: |
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --text -o semgrep-report.txt || true
+
+      # Gom cả 2 file báo cáo nộp lên đám mây lưu trữ
+      - name: 5. Upload Semgrep Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-security-reports
+          path: |
+            semgrep-report.sarif
+            semgrep-report.txt
+
+      #  Đổi đường dẫn dùng github/codeql-action/upload-sarif@v4
+      - name: 6. Upload Semgrep SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep-report.sarif
+
+  python-scan:
+    name: 2b. Bandit (Python SAST)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run Bandit Scan
+        run: |
+          pip install bandit
+          # 🛠️ ĐÃ SỬA: Thêm cờ -x để né thư mục policy/ và .github/, tránh quét nhầm script hạ tầng của ông và Khôi
+          bandit -r . -x ./policy,./.github -f json -o bandit-report.json || true
+          # Xuất bản định dạng HTML cho con người đọc
+          bandit -r . -x ./policy,./.github -f html -o bandit-report.html || true
+
+      - name: 3. Upload Bandit Security Reports
+        uses: actions/upload-artifact@v4
+        if: always() 
+        with:
+          name: bandit-security-reports
+          path: |
+            bandit-report.json
+            bandit-report.html
+
+  # --- TẠM TẮT GOLANG SCAN VÌ CHƯA CÓ CODE GO (TRÁNH LỖI NO PACKAGES FOUND) ---
+  #  golang-scan:
+  #    name: 2c. Gosec (Go SAST)
+  #    needs: terraform-check
+  #    runs-on: ubuntu-latest
+  #    steps:
+  #      - name: 1. Checkout Source Code
+  #        uses: actions/checkout@v4
+  #      - name: 2. Run Gosec Security Scan
+  #        uses: securego/gosec@master
+  #        with:
+  #          args: ./...
+
+  javascript-scan:
+    name: ESLint (JS Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run ESLint Scan
+        working-directory: app/NodeJS/juice-shop/
+        run: |
+          # Cài đặt toàn bộ thư viện cần thiết (bao gồm cả thư viện test)
+          npm install
+          
+          # Chạy Unit Test trước, nếu test lỗi thì CI dừng luôn (không chạy bước quét bảo mật phía dưới)
+          # Nếu muốn quét bảo mật bất kể test lỗi, hãy thêm "|| true" vào sau lệnh npm test
+          npm test
+          
+          # Cài thêm plugin bảo mật và quét
+          npm install eslint-plugin-security --no-save
+          npx eslint . -f json -o eslint-report.json || true
+          npx eslint . -f html -o eslint-report.html || true
+
+      - name: 3. Upload ESLint Security Reports
+        uses: actions/upload-artifact@v4
+        if: always() 
+        with:
+          name: eslint-security-reports
+          path: |
+            app/NodeJS/juice-shop/eslint-report.json
+            app/NodeJS/juice-shop/eslint-report.html
+
+  # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
+  iac-scan:
+    name: Checkov (IaC Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: 2. Run Checkov Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          # Quét thư mục gốc "." để bắt được cả file Terraform lẫn Kubernetes trong thư mục k8s/
+          directory: .
+          # Bỏ cấu hình cứng framework để Checkov tự động nhận diện cả Terraform lẫn K8s Manifests
+          skip_check: CKV2_AWS_11,CKV2_AWS_12
+          skip_path: policy/,.github/workflows/
+          # Cấu hình Checkov xuất bản song song nhiều định dạng báo cáo
+          output_format: json,sarif
+          output_file_path: checkov-report
+          soft_fail: true
+
+      - name: 3. Upload Checkov Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-iac-reports
+          path: checkov-report*
+
+      - name: 4. Upload Checkov SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: checkov-report/results_sarif.sarif 
+
+  # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
+  secret-scan:
+    name: TruffleHog (Secret Scanning)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Bắt buộc lấy toàn bộ lịch sử commit để TruffleHog quét sâu quá khứ
+
+      # Dùng Docker chính chủ quét hệ thống file và xuất bản JSON cho máy đọc
+      - name: 2. Run TruffleHog Scan (JSON Output)
+        run: |
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json || true
+
+      # Tự động chuyển đổi log JSON thành một trang HTML tĩnh 
+      - name: 3. Generate TruffleHog HTML Report
+        if: always()
+        run: |
+          echo "<html><head><title>TruffleHog Secret Scan Report</title><style>body{font-family:Arial;padding:20px;background:#f4f4f4;}pre{background:#222;color:#fff;padding:15px;border-radius:5px;overflow-x:auto;}</style></head><body>" > trufflehog-report.html
+          echo "<h1> TruffleHog Secret Scan Report</h1><p>Dưới đây là danh sách các mã bí mật, API Keys bị phát hiện lộ lọt trong mã nguồn:</p><pre>" >> trufflehog-report.html
+          
+          # Nếu file json trống hoặc không có lỗi, ghi nhận an toàn
+          if [ -s trufflehog-report.json ]; then
+            cat trufflehog-report.json >> trufflehog-report.html
+          else
+            echo "Chúc mừng! Không tìm thấy thông tin nhạy cảm nào bị lộ lọt (No secrets found)." >> trufflehog-report.html
+          fi
+          
+          echo "</pre></body></html>" >> trufflehog-report.html
+
+      # Gom toàn bộ báo cáo nộp lên hệ thống lưu trữ đám mây Artifacts
+      - name: 4. Upload TruffleHog Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trufflehog-secret-reports
+          path: |
+            trufflehog-report.json
+            trufflehog-report.html
+
+          
