@@ -15,16 +15,16 @@
   tasks:
   - name: Create Kubernetes Namespace for Juice Shop
     kubernetes.core.k8s:
+      state: present
       definition:
         apiVersion: v1
         kind: Namespace
         metadata:
           name: "{{ k8s_namespace }}"
-      host: "{{ eks_info.cluster.endpoint }}"
+      # Ansible tự động đọc ~/.kube/config để kết nối
 
   - name: Deploy Juice Shop Application using Kubernetes Manifest
     kubernetes.core.k8s:
       state: present
-      host: "{{ eks_info.cluster.endpoint }}"
-      validate_certs: false
       definition: "{{ lookup('template', '../k8s/juice-shop.yaml') }}"
+      # Ansible tự động đọc ~/.kube/config để kết nối
