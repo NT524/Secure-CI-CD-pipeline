@@ -6,6 +6,7 @@ on:
       full_image_name:
         required: true
         type: string
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   K8S_NAMESPACE: isolated-staging
@@ -13,10 +14,9 @@ env:
   AWS_REGION: us-east-1
   ENVIRONMENT: staging
   S3_BUCKET: ${{ secrets.S3_BUCKET }}
-  S3_REGION: ${{ secrets.S3_REGION }} # Cần khai báo secret này hoặc dùng cứng us-east-1
+  S3_REGION: ${{ secrets.S3_REGION }}
   DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
   cluster_name: juice-shop-cluster
-
 
 jobs:
   Deploy-to-eks:
@@ -28,7 +28,6 @@ jobs:
     steps:
       - name: Checkout mã nguồn
         uses: actions/checkout@v4
-      
       
       - name: Thiết lập Terraform
         uses: hashicorp/setup-terraform@v3
@@ -114,7 +113,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
-          
         run: |
           terraform init -upgrade \
             -backend-config="bucket=${{ env.S3_BUCKET }}" \
@@ -147,14 +145,6 @@ jobs:
             echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
             exit 0
           fi
-      
-      # - name: Terraform destroy (Clean up resources after testing - Optional)
-      #   if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' }}
-      #   working-directory: terraform
-      #   env:
-      #     TF_VAR_aws_region: ${{ env.AWS_REGION }}
-      #     TF_VAR_cluster_name: ${{ env.cluster_name }}
-      #   run: terraform destroy -auto-approve
 
       # --- BẮT ĐẦU PHẦN CONFTEST CHO HẠ TẦNG AWS ---
       - name: Setup Conftest
@@ -169,14 +159,8 @@ jobs:
         if: ${{ steps.tf-plan-eks.outputs.exitcode != '1' }}
         run: |
           terraform show -json tfplan > tfplan.json
-          
-          # 1. Xuất bản JSON (Chuẩn hóa cấu trúc máy đọc)
           conftest test tfplan.json --policy ../policy/conftest/ -o json > conftest-report.json || true
-          
-          # 2. Xuất bản HTML (Giao diện trực quan cho con người đọc)
           conftest test tfplan.json --policy ../policy/conftest/ -o html > conftest-report.html || true
-          
-          # 3. Chạy lại một lần nữa hiển thị ra màn hình log GitHub để theo dõi trực tiếp
           conftest test tfplan.json --policy ../policy/conftest/
 
       - name: Upload Conftest Security Reports
@@ -189,22 +173,11 @@ jobs:
             terraform/conftest-report.html
       # --- KẾT THÚC PHẦN CONFTEST ---
 
-      - name: Terraform Apply Plan (Provision EKS)
-        working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}} 
-        run: terraform apply tfplan
-
-      - name: Terraform Apply  (Provision EKS)
-        working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '0'}} 
-        run: | 
-          terraform apply -auto-approve
-          kubectl get pods -n isolated-staging
-
-      # --- CÀI ĐẶT OPA GATEKEEPER VÀ COSING VÀO CỤM AWS EKS ---
+      # CẤU HÌNH ĐƯỜNG TRUYỀN KUBECTL ĐẾN CỤM AWS EKS
       - name: Update Kubeconfig cho AWS EKS
         run: aws eks update-kubeconfig --name ${{ env.cluster_name }}-${{ env.ENVIRONMENT }} --region ${{ env.AWS_REGION }}
 
+      # TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
       - name: Install Gatekeeper with external data enabled
         run: |
           kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
@@ -269,7 +242,18 @@ jobs:
           kubectl get pods -n cosign-system
           kubectl get pods -n gatekeeper-system
 
-      # --- KẾT THÚC KHÔI PHỤC GATEKEEPER ---
+      # TIẾN HÀNH ĐẨY APP KHI HỆ THỐNG GÁC CỔNG ĐÃ THÔNG SUỐT MẠNG
+      - name: Terraform Apply Plan (Provision EKS)
+        working-directory: terraform
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}} 
+        run: terraform apply tfplan
+
+      - name: Terraform Apply  (Provision EKS)
+        working-directory: terraform
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '0'}} 
+        run: | 
+          terraform apply -auto-approve
+          kubectl get pods -n isolated-staging
 
       - name: Verify deployment
         id: verify
