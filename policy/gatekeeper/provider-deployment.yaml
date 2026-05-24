@@ -37,9 +37,13 @@ spec:
         - name: cosign-key
           secret:
             secretName: cosign-public-key
+        # 🛠️ ĐÃ SỬA: Ánh xạ chuẩn từ định dạng K8s (.dockerconfigjson) sang file config.json truyền thống
         - name: registry-auth
           secret:
             secretName: ghcr-registry-auth
+            items:
+              - key: .dockerconfigjson
+                path: config.json
             optional: true
 ---
 apiVersion: v1
