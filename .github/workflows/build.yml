@@ -69,11 +69,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build và Push Image
+      - name: Build Image
         uses: docker/build-push-action@v5
         with:
           context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
-          push: false
+          push: false 
           load: true 
           tags: |
             ${{ env.IMAGE_NAME }}
@@ -154,16 +154,11 @@ jobs:
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
-        
-      - name: Build và Push Image
-        uses: docker/build-push-action@v5
-        with:
-          push: true 
-          tags: |
-            ${{ env.IMAGE_NAME }}
-            ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.IMAGE_NAME }}
+          docker push ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
 
       - name: Sign the published Docker image
         env:
