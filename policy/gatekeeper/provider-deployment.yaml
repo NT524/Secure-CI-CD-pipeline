@@ -18,6 +18,8 @@ spec:
       labels:
         app: cosign-gatekeeper-provider
     spec:
+      imagePullSecrets:
+        - name: ghcr-registry-auth
       containers:
         - name: cosign-gatekeeper-provider
           image: ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
