@@ -367,7 +367,9 @@ jobs:
         id: verify
         run: |
           kubectl rollout status deployment/juice-shop -n ${{env.K8S_NAMESPACE}} --timeout=120s
-          echo "URL=http://$(kubectl get svc juice-shop-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')" >> $GITHUB_OUTPUT
+          URL=http://$(kubectl get svc juice-shop-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "$URL" 
+          echo "$URL" >> $GITHUB_OUTPUT
   
         
 
