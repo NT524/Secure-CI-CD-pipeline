@@ -299,7 +299,7 @@ jobs:
           echo "TF_VAR_environment=${{ env.ENVIRONMENT }}" >> $GITHUB_ENV
           echo "TF_VAR_ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}" >> $GITHUB_ENV
           echo "TF_VAR_ARN_POLICY=${{ secrets.ARN_POLICY }}" >> $GITHUB_ENV
-          echo "TF_VAR_APP_IMAGE=${{ env.APP_IMAGE }}" >> $GITHUB_ENV
+          echo "TF_VAR_APP_IMAGE=${{ env.IMAGE_NAME }}" >> $GITHUB_ENV
           echo "TF_VAR_K8S_NAMESPACE=${{ env.K8S_NAMESPACE }}" >> $GITHUB_ENV
           echo "TF_IN_AUTOMATION=1" >> $GITHUB_ENV
 
