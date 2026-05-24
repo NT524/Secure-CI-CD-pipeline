@@ -14,6 +14,10 @@
     command: kubectl create namespace "{{ k8s_namespace }}"
     ignore_errors: true # Bỏ qua lỗi nếu namespace đã tồn tại từ trước
 
+  - name: Create Registry Secret for GHCR
+    command: >
+      kubectl create secret docker-registry ghcr-secret --docker-server=ghcr.io --docker-username=nt524 --docker-password={{ lookup('env', 'GHCR_PAT') }} --namespace="{{ k8s_namespace }}" --dry-run=client -o yaml | kubectl apply -f -
+
   - name: Render Kubernetes Manifest Template
     template:
       src: ../../k8s/juice-shop.yaml
