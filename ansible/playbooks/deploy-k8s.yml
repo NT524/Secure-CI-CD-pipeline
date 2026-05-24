@@ -18,7 +18,7 @@
 
   - name: Render Kubernetes Manifest Template
     template:
-      src: ../k8s/juice-shop.yaml
+      src: ../../k8s/juice-shop.yaml
       dest: /tmp/juice-shop-rendered.yaml
       # Bước này Ansible sẽ tự động điền các biến {{ k8s_namespace }} và {{ app_image }} vào file
 
