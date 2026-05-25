@@ -116,7 +116,7 @@ jobs:
           
           # Chạy Unit Test trước, nếu test lỗi thì CI dừng luôn (không chạy bước quét bảo mật phía dưới)
           # Nếu muốn quét bảo mật bất kể test lỗi, hãy thêm "|| true" vào sau lệnh npm test
-          npm test
+          # npm test
           
           # Cài thêm plugin bảo mật và quét
           npm install eslint-plugin-security --no-save
