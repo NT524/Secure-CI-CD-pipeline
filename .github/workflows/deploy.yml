@@ -52,11 +52,6 @@ jobs:
     steps:
       - name: Checkout mã nguồn
         uses: actions/checkout@v4
-
-      - name: Set up Node.js ${{ env.NODE_VERSION }}
-        working-directory: app/NodeJS/juice-shop/
-        run: |
-          npm install
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
