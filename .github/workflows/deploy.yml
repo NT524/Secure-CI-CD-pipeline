@@ -179,11 +179,7 @@ jobs:
         working-directory: terraform
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
         run: |
-          if [ -f tfplan ]; then
-            terraform apply tfplan
-          else
             terraform apply -auto-approve
-
             kubectl get pods -n ${{ env.K8S_NAMESPACE }}
 
       - name: Verify deployment
