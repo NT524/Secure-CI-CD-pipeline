@@ -27,7 +27,7 @@ on:
   
 # BỔ SUNG QUAN TRỌNG: Cấp quyền ở file Mẹ để ủy quyền xuống cho các file Con
 permissions:
-  contents: read
+  contents: write
   packages: write
   id-token: write
   security-events: write
