@@ -181,7 +181,7 @@ jobs:
             '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $img, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
 
           # Gửi file đã được rút gọn lên Loki
-          curl -H "Content-Type: application/json" \
+          curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
                -X POST "https://loki.yourdomain.com/loki/api/v1/push" \
                -d @loki_payload.json
