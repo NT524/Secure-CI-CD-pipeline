@@ -185,7 +185,6 @@ jobs:
             terraform apply -auto-approve
 
             kubectl get pods -n ${{ env.K8S_NAMESPACE }}
-          fi
 
       - name: Verify deployment
         id: verify
