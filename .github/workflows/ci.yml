@@ -39,19 +39,19 @@ jobs:
   #   uses: ./.github/workflows/scan.yml
 
   # # Gọi file Build chạy sau khi Scan xong
-  Build:
-    # needs: Scan
-    if: always()
-    uses: ./.github/workflows/build.yml
-    secrets: inherit # Kế thừa các secret từ repo
+  # Build:
+  #   # needs: Scan
+  #   if: always()
+  #   uses: ./.github/workflows/build.yml
+  #   secrets: inherit # Kế thừa các secret từ repo
 
   # # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
-  # Deploy:
-  #   needs: Build
-  #   uses: ./.github/workflows/deploy.yml
-  #   with:
-  #     full_image_name: ${{ needs.Build.outputs.full_image_name }}
-  #   secrets: inherit
+  Deploy:
+    # needs: Build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      full_image_name: ${{ needs.Build.outputs.full_image_name }}
+    secrets: inherit
 
   # Dast-scan:
   #   needs: Deploy
