@@ -1,21 +1,21 @@
 name: Infrastructure Deploy and Gatekeeper
 
 on:
-#   pull_request:
-#     types:
-#     - closed
-#     paths-ignore:
-#     - 'VERSION'
-#     branches:
-#     - dev
-#   push:
-#     branches:
-#     - prod
-#     - dev
-#     - staging
-#     paths-ignore:
-#     - 'VERSION'
-#     - 'README.md'
+  pull_request:
+    types:
+    - closed
+    paths-ignore:
+    - 'VERSION'
+    branches:
+    - dev
+  push:
+    branches:
+    - prod
+    - dev
+    - staging
+    paths-ignore:
+    - 'VERSION'
+    - 'README.md'
   workflow_dispatch:
 
   workflow_call:
@@ -175,6 +175,116 @@ jobs:
             exit 0
           fi
 
+      # --- BẮT ĐẦU PHẦN CONFTEST CHO HẠ TẦNG AWS ---
+      - name: Setup Conftest
+        if: ${{ steps.tf-plan-eks.outputs.exitcode != '1' }}
+        run: |
+          wget https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz
+          tar -xzf conftest_0.50.0_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin
+
+      - name: Terraform Plan & Run Conftest Policy Scan
+        working-directory: terraform
+        if: ${{ steps.tf-plan-eks.outputs.exitcode != '1' }}
+        run: |
+          terraform show -json tfplan > tfplan.json
+          conftest test tfplan.json --policy ../policy/conftest/ -o json > conftest-report.json || true
+          conftest test tfplan.json --policy ../policy/conftest/ -o html > conftest-report.html || true
+          conftest test tfplan.json --policy ../policy/conftest/
+
+      - name: Upload Conftest Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conftest-infrastructure-reports
+          path: |
+            terraform/conftest-report.json
+            terraform/conftest-report.html
+      # --- KẾT THÚC PHẦN CONFTEST ---
+
+      # CẤU HÌNH ĐƯỜNG TRUYỀN KUBECTL ĐẾN CỤM AWS EKS
+      - name: Update Kubeconfig cho AWS EKS
+        run: aws eks update-kubeconfig --name ${{ env.cluster_name }}-${{ env.ENVIRONMENT }} --region ${{ env.AWS_REGION }}
+
+      # TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
+      - name: Install Gatekeeper with external data enabled
+        run: |
+          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
+          kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+          
+          echo "⏳ Đợi 20 giây để Gatekeeper Webhook khởi động mạng hoàn tất..."
+          sleep 20
+          
+      - name: Sync Cosign public key and registry auth into cluster
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+          
+          # 1. Tạo khóa Public Key cho Cosign
+          printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
+          kubectl -n cosign-system create secret generic cosign-public-key \
+            --from-file=cosign.pub=./cosign.pub \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # 2. 🛠️ THÊM DÒNG NÀY: Xóa cứng Secret cũ đang bị kẹt định dạng để tránh lỗi "field is immutable"
+          kubectl -n cosign-system delete secret ghcr-registry-auth --ignore-not-found=true
+
+          # 3. Tiến hành đúc Secret định dạng docker-registry mới tinh hoàn toàn hợp lệ
+          kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USERNAME" \
+            --docker-password="$GHCR_PAT" \
+            --dry-run=client -o yaml | kubectl apply -f -
+            
+          rm -f cosign.pub
+
+      - name: Log in to GitHub Container Registry for Provider
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push cosign verification provider image to GHCR
+        run: |
+          docker build -t ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest policy/cosign-provider
+          docker push ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
+
+      - name: Apply Gatekeeper policy gate
+        run: |
+          echo "🧹 THÊM BƯỚC NÀY: Dọn sạch luật chặn cũ để giải phóng cụm, tránh lỗi tự chặn chính mình (Deadlock)"
+          kubectl delete -f policy/gatekeeper/constraint.yaml --ignore-not-found=true
+          kubectl delete -f policy/gatekeeper/constraint-template.yaml --ignore-not-found=true
+
+          echo "🚀 Tiến hành deploy Pod Provider mới..."
+          kubectl apply -f policy/gatekeeper/provider-deployment.yaml
+          kubectl apply -f policy/gatekeeper/provider.yaml
+          
+          echo "⏳ ĐỢI 45 GIÂY để Pod Provider mới chính thức lên đĩa và mở cổng 8090..."
+          sleep 45
+
+          echo "=== Kiểm tra trạng thái Pod Provider ==="
+          kubectl get pods -n cosign-system
+
+          echo "🔒 Tái áp dụng luật chặn bảo mật sau khi lính gác đã sống dậy chuẩn chỉ"
+          kubectl apply -f policy/gatekeeper/constraint-template.yaml
+          for i in $(seq 1 30); do
+            if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          kubectl apply -f policy/gatekeeper/constraint.yaml
+          
+          echo "⏳ Đợi 15 giây để luật kiểm duyệt đồng bộ vào nhân Gatekeeper..."
+          sleep 15
+
       # TIẾN HÀNH ĐẨY APP KHI HỆ THỐNG GÁC CỔNG ĐÃ THÔNG SUỐT MẠNG
       - name: Terraform Apply Plan (Provision EKS)
         working-directory: terraform
@@ -186,7 +296,7 @@ jobs:
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '0'}} 
         run: | 
           terraform apply -auto-approve
-          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+          kubectl get pods -n isolated-staging
 
       - name: Verify deployment
         id: verify
