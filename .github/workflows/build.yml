@@ -123,14 +123,6 @@ jobs:
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
 
-      - name: Run security scan on deployed application
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "${{ env.IMAGE_NAME }}"
-          format: "sarif"
-          output: "trivy-results.json"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: true
 
       - name: Upload Trivy SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
@@ -170,16 +162,29 @@ jobs:
           path: sbom.spdx.json
           retention-days: 7
       
-      - name: Push Trivy Report to Grafana Loki
-        if: always() # Đảm bảo log luôn được gửi kể cả khi Trivy tìm thấy lỗi
+      - name: Push Cleaned Trivy Report to Grafana Loki
+        if: always()
         run: |
           TIMESTAMP=$(date +%s%N)
-          LOG_CONTENT=$(cat trivy-results.json | jq -c .)
           
+          # Lọc file JSON, chỉ giữ lại thông tin cơ bản của từng lỗ hổng tìm thấy để giảm dung lượng file xuống 90%
+          jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-results.json > trivy_short.json
+          
+          # Tạo cấu trúc payload cho Loki
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "trivy-container-scan" \
+            --arg img "${{ env.IMAGE_NAME }}" \
+            --arg repo "${{ github.repository }}" \
+            --slurpfile log trivy_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $img, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          # Gửi file đã được rút gọn lên Loki
           curl -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST "${{ secrets.LOKI_URL }}" \
-               -d "{\"streams\": [{\"stream\": {\"job\": \"github-actions\", \"scan_type\": \"trivy-container-scan\", \"image\": \"${{ env.IMAGE_NAME }}\", \"repo\": \"${{ github.repository }}\"}, \"values\": [[\"$TIMESTAMP\", $LOG_CONTENT]]}]}"
+               -X POST "https://loki.yourdomain.com/loki/api/v1/push" \
+               -d @loki_payload.json
 
       - name: Sign the published Docker image
         env:
