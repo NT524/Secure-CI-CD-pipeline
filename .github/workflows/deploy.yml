@@ -19,10 +19,10 @@ on:
   workflow_dispatch:
 
   workflow_call:
-    # inputs:
-    #   full_image_name:
-    #     required: true
-    #     type: string
+    inputs:
+      full_image_name:
+        required: true
+        type: string
 
 
 permissions:
@@ -40,7 +40,7 @@ env:
   S3_REGION: ${{ secrets.S3_REGION }}
   DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
   cluster_name: juice-shop-cluster
-  IMAGE_NAME: ghcr.io/nt524/secure-ci-cd-pipeline/juice-shop:49cf3fcd6f33f1d796b9327105cad669a59850ac-staging
+  IMAGE_NAME: ${{ inputs.full_image_name }}
 
 jobs:
   Deploy-to-eks:

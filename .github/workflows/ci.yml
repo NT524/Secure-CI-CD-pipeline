@@ -50,7 +50,8 @@ jobs:
     # needs: Build
     uses: ./.github/workflows/deploy.yml
     with:
-      full_image_name: ${{ needs.Build.outputs.full_image_name }}
+      # full_image_name: ${{ needs.Build.outputs.full_image_name }}
+      full_image_name: ghcr.io/nt524/secure-ci-cd-pipeline/juice-shop:49cf3fcd6f33f1d796b9327105cad669a59850ac-staging
     secrets: inherit
 
   # Dast-scan:
