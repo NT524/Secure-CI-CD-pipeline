@@ -29,6 +29,7 @@ permissions:
   contents: write
   id-token: write
   security-events: write
+  packages: read
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -180,7 +181,7 @@ jobs:
       - name: Verify deployment
         id: verify
         run: |
-          # kubectl rollout status deployment/juice-shop -n ${{env.K8S_NAMESPACE}} --timeout=120s
+          kubectl rollout status deployment/juice-shop -n ${{env.K8S_NAMESPACE}} --timeout=120s
           RAW_URL="$(kubectl get svc juice-shop-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
           
           # Tự động thay thế chuỗi che khuất "***" bằng chính region đang chạy trong env
