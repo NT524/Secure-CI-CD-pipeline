@@ -53,7 +53,7 @@ jobs:
       - name: Checkout mã nguồn
         uses: actions/checkout@v4
 
-      - name: 2. Set up Node.js ${{ env.NODE_VERSION }}
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
         working-directory: app/NodeJS/juice-shop/
         run: |
           npm install
@@ -175,18 +175,17 @@ jobs:
             exit 0
           fi
 
-      # TIẾN HÀNH ĐẨY APP KHI HỆ THỐNG GÁC CỔNG ĐÃ THÔNG SUỐT MẠNG
-      - name: Terraform Apply Plan (Provision EKS)
+      - name: Terraform Apply Infrastructure
         working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}} 
-        run: terraform apply tfplan
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
+        run: |
+          if [ -f tfplan ]; then
+            terraform apply tfplan
+          else
+            terraform apply -auto-approve
 
-      - name: Terraform Apply  (Provision EKS)
-        working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '0'}} 
-        run: | 
-          terraform apply -auto-approve
-          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+            kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+          fi
 
       - name: Verify deployment
         id: verify
