@@ -26,8 +26,6 @@
       dest: /tmp/juice-shop-rendered.yaml
       # Bước này Ansible sẽ tự động điền các biến {{ k8s_namespace }} và {{ app_image }} vào file
 
-  - name: Deploy Juice Shop Application using kubectl
-    command: kubectl delete -f /tmp/juice-shop-rendered.yaml --ignore-not-found=true
 
   - name: Deploy Juice Shop Application using kubectl
     command: kubectl apply -f /tmp/juice-shop-rendered.yaml
