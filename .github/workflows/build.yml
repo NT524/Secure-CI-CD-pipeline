@@ -183,7 +183,7 @@ jobs:
           # Gửi file đã được rút gọn lên Loki
           curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST "https://loki.yourdomain.com/loki/api/v1/push" \
+               -X POST ${{ secrets.LOKI_URL }} \
                -d @loki_payload.json
 
       - name: Sign the published Docker image
