@@ -1,11 +1,34 @@
 name: Infrastructure Deploy and Gatekeeper
 
 on:
+  pull_request:
+    types:
+    - closed
+    paths-ignore:
+    - 'VERSION'
+    branches:
+    - dev
+  push:
+    branches:
+    - prod
+    - dev
+    - staging
+    paths-ignore:
+    - 'VERSION'
+    - 'README.md'
+  workflow_dispatch:
+
   workflow_call:
     inputs:
       full_image_name:
         required: true
         type: string
+
+
+permissions:
+  contents: write
+  id-token: write
+  security-events: write
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -28,8 +51,13 @@ jobs:
     steps:
       - name: Checkout mã nguồn
         uses: actions/checkout@v4
+
+      - name: 2. Set up Node.js ${{ env.NODE_VERSION }}
+        working-directory: app/NodeJS/juice-shop/
+        run: |
+          npm install
       
-      - name: Thiết lập Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
       - name: Nạp AWS Credentials
