@@ -11,6 +11,8 @@ on:
 env:
   AWS_REGION: us-east-1
   ENVIRONMENT: staging
+  ECR_REPOSITORY: nt524
+  APP_NAME: juice-shop
 jobs:
   build-and-test:
     name: Build & Push Application
@@ -60,7 +62,7 @@ jobs:
           echo "ENV=${ENVIRONMENT}" >> $GITHUB_OUTPUT
 
           VERSION_TAG="${{ github.sha }}"
-          IMAGE_NAME=${{env.ECR_REGISTRY}}/juice-shop:${VERSION_TAG}-${ENVIRONMENT}
+          IMAGE_NAME=${{env.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:${{ env.APP_NAME }}-${VERSION_TAG}-${ENVIRONMENT}
 
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
