@@ -139,8 +139,7 @@ jobs:
       - name: Terraform Init
         working-directory: terraform
         run: |
-          terraform import kubernetes_namespace.isolated_namespace isolated-staging
-          terraform init -upgrade \
+          terraform init -reconfigure -upgrade \
             -backend-config="bucket=${{ env.S3_BUCKET }}" \
             -backend-config="key=state/${{ env.ENVIRONMENT }}.tfstate" \
             -backend-config="region=${{ env.S3_REGION }}" \
