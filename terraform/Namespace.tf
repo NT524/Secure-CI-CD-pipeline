@@ -1,4 +1,9 @@
 # 1. Khởi tạo Namespace Cô Lập bằng Terraform
+import {
+  to = kubernetes_namespace.isolated_namespace
+  id = "isolated-staging" # Tên của namespace thực tế đang có trên EKS
+}
+
 resource "kubernetes_namespace" "isolated_namespace" {
   depends_on = [module.eks] # Chỉ tạo sau khi cụm EKS đã dựng xong thành công
 
