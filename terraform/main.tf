@@ -133,9 +133,9 @@ resource "null_resource" "ansible_deploy" {
 
   # Trigger này giúp tái kích hoạt Ansible nếu thông tin Image hoặc Namespace thay đổi
   triggers = {
-    app_image     = var.IMAGE_NAME # Hoặc biến chứa link ảnh Docker của bạn
+    app_image     = var.IMAGE_NAME 
     k8s_namespace = var.K8S_NAMESPACE
-    always_run    = timestamp() # Bỏ comment dòng này nếu muốn LẦN NÀO terraform apply cũng chạy lại Ansible
+    always_run    = timestamp() 
   }
 
   provisioner "local-exec" {

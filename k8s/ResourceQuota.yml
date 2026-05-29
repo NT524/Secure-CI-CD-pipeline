@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: staging-quota
+  namespace: isolated-staging
+spec:
+  hard:
+    pods: "5" # Tối đa 5 Pod được chạy trong namespace này
+    requests.cpu: "1" # Tổng CPU requests tối đa là 1 Core
+    requests.memory: 1Gi
+    limits.cpu: "2"
+    limits.memory: 2Gi
