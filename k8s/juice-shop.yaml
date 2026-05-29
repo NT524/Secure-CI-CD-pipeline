@@ -41,10 +41,11 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
 spec:
-  type: LoadBalancer
+  type: NodePort
   selector:
     app: juice-shop
   ports:
   - protocol: TCP
     port: 80 # Mở port 80 thẳng ra Internet
     targetPort: 3000 # Port thực tế của container
+    nodePort: 32000
