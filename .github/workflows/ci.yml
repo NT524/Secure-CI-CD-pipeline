@@ -44,6 +44,11 @@ jobs:
     # if: always()
     uses: ./.github/workflows/build.yml
     secrets: inherit # Kế thừa các secret từ repo
+    with:
+      # Truyền biến môi trường từ file Mẹ vào file Build để dùng trong quá trình build image
+      ENVIRONMENT: ${{ env.ENVIRONMENT }}
+      NODE_VERSION: ${{ env.NODE_VERSION }}
+      AWS_REGION: ${{ env.AWS_REGION }}
 
   # # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
   # Deploy:

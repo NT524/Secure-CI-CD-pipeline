@@ -8,7 +8,9 @@ on:
         value: ${{ jobs.build-and-test.outputs.full_image_name }}
 
   workflow_dispatch: 
-
+env:
+  AWS_REGION: us-east-1
+  ENVIRONMENT: staging
 jobs:
   build-and-test:
     name: Build & Push Application
