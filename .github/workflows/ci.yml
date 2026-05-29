@@ -3,7 +3,6 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   K8S_NAMESPACE: isolated-staging
   NODE_VERSION: 24
-  AWS_REGION: us-east-1
   ENVIRONMENT: staging
   S3_BUCKET: ${{ secrets.S3_BUCKET }}
   S3_REGION: ${{ secrets.S3_REGION }} # Cần khai báo secret này hoặc dùng cứng us-east-1
@@ -44,11 +43,7 @@ jobs:
     # if: always()
     uses: ./.github/workflows/build.yml
     secrets: inherit # Kế thừa các secret từ repo
-    with:
-      # Truyền biến môi trường từ file Mẹ vào file Build để dùng trong quá trình build image
-      ENVIRONMENT: ${{ env.ENVIRONMENT }}
-      NODE_VERSION: ${{ env.NODE_VERSION }}
-      AWS_REGION: ${{ env.AWS_REGION }}
+      
 
   # # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
   # Deploy:
