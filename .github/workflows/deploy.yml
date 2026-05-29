@@ -184,7 +184,7 @@ jobs:
         run: |
           kubectl rollout status deployment/juice-shop -n ${{env.K8S_NAMESPACE}} --timeout=120s
 
-          RAW_URL="http://$(kubectl get svc juice-shop -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+          RAW_URL="http://$(kubectl get svc juice-shop-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
           # Tự động thay thế chuỗi che khuất "***" bằng chính region đang chạy trong env
           URL="http://$(echo "$RAW_URL" | sed "s/\*\*\*/${{ env.AWS_REGION }}/g")"
           
