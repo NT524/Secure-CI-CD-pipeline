@@ -130,9 +130,8 @@ module "eks" {
 resource "null_resource" "ansible_deploy" {
   # Đảm bảo Ansible chỉ chạy SAU KHI module EKS và các Node Group đã hoàn thành
   depends_on = [
-    module.eks, 
-    kubernetes_namespace.isolated_namespace, 
-    kubernetes_resource_quota.staging_quota
+    module.eks,
+    kubernetes_namespace.isolated_namespace
   ]
 
   # Trigger này giúp tái kích hoạt Ansible nếu thông tin Image hoặc Namespace thay đổi
