@@ -38,19 +38,19 @@ jobs:
   #   uses: ./.github/workflows/scan.yml
 
   # # Gọi file Build chạy sau khi Scan xong
-  Build:
-    # needs: Scan
-    # if: always()
-    uses: ./.github/workflows/build.yml
-    secrets: inherit # Kế thừa các secret từ repo
+  # Build:
+  #   # needs: Scan
+  #   # if: always()
+  #   uses: ./.github/workflows/build.yml
+  #   secrets: inherit # Kế thừa các secret từ repo
       
 
   # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
   Deploy:
-    needs: Build
+    # needs: Build
     uses: ./.github/workflows/deploy.yml
     with:
-      full_image_name: ${{ needs.Build.outputs.full_image_name }}
+      full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
       # full_image_name: "ghcr.io/nt524/secure-ci-cd-pipeline/juice-shop:49cf3fcd6f33f1d796b9327105cad669a59850ac-staging"
     secrets: inherit
 
