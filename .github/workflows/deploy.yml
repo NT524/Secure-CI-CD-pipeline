@@ -139,13 +139,15 @@ jobs:
       - name: Terraform Init
         working-directory: terraform
         run: |
+          terraform import kubernetes_namespace.isolated_namespace isolated-staging
+          
           terraform init -upgrade \
             -backend-config="bucket=${{ env.S3_BUCKET }}" \
             -backend-config="key=state/${{ env.ENVIRONMENT }}.tfstate" \
             -backend-config="region=${{ env.S3_REGION }}" \
             -backend-config="encrypt=true" \
-            -backend-config="dynamodb_table=${{ env.DYNAMODB_TABLE }}"
-          terraform import kubernetes_namespace.isolated_namespace isolated-staging
+            -backend-config="use_locking=true" \
+          
 
       - name: Terraform Refresh State
         working-directory: terraform
