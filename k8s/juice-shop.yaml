@@ -17,8 +17,6 @@ spec:
       labels:
         app: juice-shop
     spec:
-      imagePullSecrets:
-      - name: ghcr-secret
       containers:
       - name: juice-shop
         image: "{{app_image}}"

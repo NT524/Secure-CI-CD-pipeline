@@ -129,7 +129,11 @@ module "eks" {
 # Resource này dùng để kích hoạt Ansible sau khi EKS tạo xong
 resource "null_resource" "ansible_deploy" {
   # Đảm bảo Ansible chỉ chạy SAU KHI module EKS và các Node Group đã hoàn thành
-  depends_on = [module.eks]
+  depends_on = [
+    module.eks, 
+    kubernetes_namespace.isolated_namespace, 
+    kubernetes_resource_quota.staging_quota
+  ]
 
   # Trigger này giúp tái kích hoạt Ansible nếu thông tin Image hoặc Namespace thay đổi
   triggers = {
@@ -139,7 +143,7 @@ resource "null_resource" "ansible_deploy" {
   }
 
   provisioner "local-exec" {
-    # Khai báo các biến môi trường trực tiếp cho script chạy
+
     environment = {
       AWS_ACCESS_KEY_ID     = var.AWS_ACCESS_KEY_ID
       AWS_SECRET_ACCESS_KEY = var.AWS_SECRET_ACCESS_KEY
@@ -147,30 +151,19 @@ resource "null_resource" "ansible_deploy" {
       CLUSTER_NAME          = "${local.cluster_name}"
     }
 
-    # Lệnh thực thi chạy Playbook
     command = <<EOT
       echo "=== [Terraform Local-Exec] Đang cấu hình Kubeconfig ==="
       aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $CLUSTER_NAME
-
 
       echo "=== [Terraform Local-Exec] Bắt đầu kích hoạt Ansible Playbook ==="
       ansible-playbook ${path.cwd}/../ansible/playbooks/deploy-k8s.yml \
         -i ${path.cwd}/../ansible/inventory.ini \
         -e "tf_var_k8s_namespace=${var.K8S_NAMESPACE}" \
-        -e "tf_var_image_name=${var.IMAGE_NAME}" \
-        -e "tf_var_GITHUB_TOKEN=${var.GITHUB_TOKEN}" \
-        -e "tf_var_GITHUB_ACTOR=${var.GITHUB_ACTOR}" \
+        -e "tf_var_image_name=${var.IMAGE_NAME}" 
 
     EOT
   }
 }
 
-# data "kubernetes_service" "juice_shop" {
-#   depends_on = [null_resource.ansible_deploy]
-#   metadata {
-#     name      = "juice-shop"
-#     namespace = var.K8S_NAMESPACE
-#   }
-# }
 
 
