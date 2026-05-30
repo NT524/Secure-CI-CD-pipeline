@@ -65,7 +65,8 @@ jobs:
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-
+        with:
+          terraform_wrapper: false
       - name: Nạp AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
