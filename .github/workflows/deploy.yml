@@ -19,6 +19,9 @@ on:
             ENVIRONMENT:
                 required: true
                 type: string
+        outputs:
+            URL:
+                value: ${{ jobs.Deploy-to-eks.outputs.URL }}
 
 permissions:
     contents: write

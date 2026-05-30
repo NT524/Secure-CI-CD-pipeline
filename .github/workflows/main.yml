@@ -72,24 +72,27 @@ jobs:
     #         AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
     #     secrets: inherit
     # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
-    Deploy:
-        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-        # needs: [Provision, Build, Get-ENVIRONMENT]
+    # Deploy:
+    #     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    #     # needs: [Provision, Build, Get-ENVIRONMENT]
+    #     needs: Get-ENVIRONMENT
+    #     uses: ./.github/workflows/deploy.yml
+    #     with:
+    #         full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
+    #         CLUSTER_NAME: juice-shop-cluster-staging
+    #         K8S_NAMESPACE: app-namespace-staging
+    #         ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
+    #         AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
+    #         # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
+    #         # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
+    #         # full_image_name: ${{needs.Build.outputs.full_image_name}}
+
+    #     secrets: inherit
+
+    Dast-scan:
+      # needs: Deploy
         needs: Get-ENVIRONMENT
-        uses: ./.github/workflows/deploy.yml
+        uses: ./.github/workflows/zap.yml
         with:
-            full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
-            CLUSTER_NAME: juice-shop-cluster-staging
-            K8S_NAMESPACE: app-namespace-staging
-            ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
-            AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
-            # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
-            # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
-            # full_image_name: ${{needs.Build.outputs.full_image_name}}
-
+            targets: http://a465575b2b1eb432a831f4fb6439e9d9-1979129099.us-east-1.elb.amazonaws.com
         secrets: inherit
-
-  # Dast-scan:
-  #   needs: Deploy
-  #   uses: ./.github/workflows/zap.yml
-  #   secrets: inherit
