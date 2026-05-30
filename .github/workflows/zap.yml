@@ -61,7 +61,7 @@ jobs:
           issue_title: "🚨 DAST Alert: Vulnerabilities found in Juice Shop"
           fail_action: false
           cmd_options: >-
-            -a -m 5
+            -a -j
             -z "-config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement='Authorization: Bearer ${{ env.JWT_TOKEN }}'"
           artifact_name: "zap-scan-report"
 
