@@ -6,7 +6,7 @@ terraform {
         # key            = S3_KEY
         # region         = S3_REGION
         # encrypt        = true
-        # dynamodb_table = DYNAMODB_TABLE
+        # dynamodb_table = DYNAMODB_TABLE 
     }
 
   required_providers {
