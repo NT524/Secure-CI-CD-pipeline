@@ -6,13 +6,20 @@ on:
       full_image_name:
         description: "The full tag of the built image"
         value: ${{ jobs.build-and-test.outputs.full_image_name }}
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
 
   workflow_dispatch: 
 env:
-  AWS_REGION: us-east-1
-  ENVIRONMENT: staging
+  AWS_REGION: ${{ inputs.AWS_REGION }}
   ECR_REPOSITORY: nt524
   APP_NAME: juice-shop
+  ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
 jobs:
   build-and-test:
     name: Build & Push Application
@@ -21,8 +28,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
-      current_version: ${{ steps.prep.outputs.VERSION }}
-      current_env: ${{ steps.prep.outputs.ENV }}
 
     permissions:
       contents: read
