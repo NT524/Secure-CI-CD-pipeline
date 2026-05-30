@@ -131,6 +131,7 @@ resource "null_resource" "ansible_deploy" {
   # Đảm bảo Ansible chỉ chạy SAU KHI module EKS và các Node Group đã hoàn thành
   depends_on = [
     module.eks,
+    module.vpc,
     kubernetes_namespace.isolated_namespace
   ]
 

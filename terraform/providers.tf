@@ -52,6 +52,6 @@ provider "kubernetes" {
     api_version = "client.authentication.k8s.io/v1beta1"
     command     = "aws"
     # Tự động lấy token bảo mật tạm thời từ cụm EKS vừa tạo
-    args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
+    args        = ["eks", "get-token", "--cluster-name", var.cluster_name]
   }
 }
