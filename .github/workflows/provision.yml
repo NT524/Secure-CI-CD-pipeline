@@ -143,14 +143,15 @@ jobs:
             -backend-config="encrypt=true" \
             -backend-config="dynamodb_table=${{ env.DYNAMODB_TABLE }}"
           
-
       - name: Terraform Plan EKS
         id: tf-plan-eks
         working-directory: terraform
         run: |
+          set +e
           exitcode=0
           terraform plan -detailed-exitcode -no-color -out tfplan || exitcode=$?
-          
+          set -e
+
           if [ $exitcode -eq 1 ]; then
             echo "Terraform Plan Failed!"
             exit 1
