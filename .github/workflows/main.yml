@@ -81,10 +81,8 @@ jobs:
             full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
             CLUSTER_NAME: juice-shop-cluster-staging
             K8S_NAMESPACE: app-namespace-staging
-            AWS_REGION: us-east-1
-            ENVIRONMENT: staging
-            # ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
-            # AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
+            ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
             # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
             # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
             # full_image_name: ${{needs.Build.outputs.full_image_name}}
