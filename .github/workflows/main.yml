@@ -2,23 +2,21 @@ name: DevSecOps Integrated Pipeline
 
 # 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
-  pull_request:
-    types:
-    - closed
-    paths-ignore:
-    - 'VERSION'
-    branches:
-    - dev
   push:
     branches:
-    - prod
-    - dev
-    - staging
+      - staging
+      - prod
     paths-ignore:
-    - 'VERSION'
-    - 'README.md'
-
-  workflow_dispatch: 
+      - 'VERSION'
+      - 'README.md'
+  pull_request:
+    branches:
+      - staging
+      - prod
+    paths-ignore:
+      - 'VERSION'
+      - 'README.md'
+  workflow_dispatch:
     
 permissions:
   contents: write
@@ -36,13 +34,21 @@ jobs:
             ENVIRONMENT: ${{ steps.set-env.outputs.ENVIRONMENT }}
             AWS_REGION: ${{ steps.set-env.outputs.AWS_REGION }}
         steps:
-            -   name: Publish Current Environment
-                id: set-env
-                run: |
-                    echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
-
-                    export ENVIRONMENT=$(echo "${{ github.ref }}" | sed -e "s/refs\\/heads\\///g")
-                    echo "ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
+            - name: Publish Current Environment
+              id: set-env
+              run: |
+                echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
+                
+                # Xử lý thông minh để lấy đúng tên nhánh (staging hoặc prod)
+                # Tránh lỗi lấy nhầm chuỗi 'refs/pull/.../merge' khi chạy bằng Pull Request
+                if [ "${{ github.event_name }}" == "pull_request" ]; then
+                  ENV_NAME="${{ github.base_ref }}"
+                else
+                  ENV_NAME="${{ github.ref_name }}"
+                fi
+                
+                echo "ENVIRONMENT=$ENV_NAME" >> "$GITHUB_OUTPUT"
+                echo "✅ Đã xác định được môi trường thực thi: $ENV_NAME"
     #===================================CI=================================== 
   # # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
   # Scan:
@@ -60,12 +66,14 @@ jobs:
     Provision:
         uses: ./.github/workflows/provision.yml
         needs: Get-ENVIRONMENT
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
             ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
             AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
         secrets: inherit
     # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
     # Deploy:
+    #     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     #     needs: [Provision, Build, Get-ENVIRONMENT]
     #     uses: ./.github/workflows/deploy.yml
     #     with:
