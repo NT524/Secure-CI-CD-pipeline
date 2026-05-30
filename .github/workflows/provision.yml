@@ -49,8 +49,6 @@ jobs:
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Nạp AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -131,9 +129,11 @@ jobs:
         id: tf-plan-eks
         working-directory: terraform
         run: |
+          set +e
           exitcode=0
           terraform plan -detailed-exitcode -no-color -out tfplan 
           exitcode=$?
+          set -e
 
           if [ $exitcode -eq 1 ]; then
             echo "Terraform Plan Failed!"
