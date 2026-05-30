@@ -42,7 +42,7 @@ jobs:
                     echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 
                     export ENVIRONMENT=$(echo "${{ github.ref }}" | sed -e "s/refs\\/heads\\///g")
-                    echo "ENV=${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
+                    echo "ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
     #===================================CI=================================== 
   # # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
   # Scan:
