@@ -43,14 +43,3 @@ variable "AWS_SECRET_ACCESS_KEY" {
   type        = string
   sensitive   = true
 }
-
-variable "GITHUB_TOKEN" {
-  description = "GitHub Token for GitHub Actions to interact with GitHub API (e.g., for pushing to GHCR)"
-  type        = string
-  sensitive   = true
-}
-variable "GITHUB_ACTOR" {
-  description = "GitHub Actor (username) for GitHub Actions to identify itself when interacting with GitHub API"
-  type        = string
-  sensitive   = true
-}
