@@ -1,20 +1,5 @@
 name: Deploy to EKS
 on:
-    pull_request:
-        types:
-        - closed
-        paths-ignore:
-        - 'VERSION'
-        branches:
-        - dev
-    push:
-        branches:
-        - prod
-        - dev
-        - staging
-        paths-ignore:
-        - 'VERSION'
-        - 'README.md'
     workflow_dispatch:
 
     workflow_call:
