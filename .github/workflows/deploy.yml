@@ -16,6 +16,9 @@ on:
             AWS_REGION:
                 required: true
                 type: string
+            ENVIRONMENT:
+                required: true
+                type: string
 
 permissions:
     contents: write

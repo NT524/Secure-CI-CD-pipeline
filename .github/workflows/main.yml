@@ -75,7 +75,7 @@ jobs:
     Deploy:
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         # needs: [Provision, Build, Get-ENVIRONMENT]
-        needs: [Get-ENVIRONMENT]
+        needs: Get-ENVIRONMENT
         uses: ./.github/workflows/deploy.yml
         with:
             full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
