@@ -92,7 +92,7 @@ jobs:
             --arg ts "$TIMESTAMP" \
             --arg job "github-actions" \
             --arg scan_type "zap-dast-scan" \
-            --arg target "${{ env.target }}" \  
+            --arg target "${{ env.target }}" \
             --arg repo "${{ github.repository }}" \
             --slurpfile log zap_short.json \
             '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
