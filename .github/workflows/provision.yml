@@ -149,8 +149,7 @@ jobs:
         working-directory: terraform
         run: |
           exitcode=0
-          terraform plan -detailed-exitcode -no-color -out tfplan 
-          exitcode=$?
+          terraform plan -detailed-exitcode -no-color -out tfplan || exitcode=$?
           
           if [ $exitcode -eq 1 ]; then
             echo "Terraform Plan Failed!"
