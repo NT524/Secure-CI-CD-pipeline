@@ -61,8 +61,9 @@ jobs:
           rules_file_name: ".zap/rules.tsv"
           issue_title: "🚨 DAST Alert: Vulnerabilities found in Juice Shop"
           fail_action: true
-          cmd_options: '-a -m 5 -config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement="Authorization: Bearer ${{ env.JWT_TOKEN }}"'
-
+          cmd_options: >-
+            -a -m 5
+            -z "-config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement='Authorization: Bearer ${{ env.JWT_TOKEN }}'"
           artifact_name: "zap-scan-report"
 
       - name: Lưu trữ báo cáo (Gather Findings)
