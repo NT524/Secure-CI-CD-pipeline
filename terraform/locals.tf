@@ -1,5 +1,5 @@
 locals {
-    cluster_name = "${var.cluster_name}-${var.environment}"
+    CLUSTER_NAME = "${var.cluster_name}-${var.environment}"
     # CIDR blocks for each environment
     vpc_cidrs = {
         staging = "10.1.0.0/16"
