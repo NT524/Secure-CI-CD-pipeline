@@ -23,34 +23,4 @@ variable "ARN_POLICY" {
   type        = string
 }
 
-variable "IMAGE_NAME" {
-  description = "Docker image for the application to deploy on EKS"
-  type        = string
-}
 
-variable "K8S_NAMESPACE" {
-  description = "Kubernetes namespace to deploy the application"
-  type        = string
-}
-
-variable "AWS_ACCESS_KEY_ID" {
-  description = "AWS Access Key ID for GitHub Actions"
-  type        = string
-  sensitive   = true
-}
-variable "AWS_SECRET_ACCESS_KEY" {
-  description = "AWS Secret Access Key for GitHub Actions"
-  type        = string
-  sensitive   = true
-}
-
-variable "GITHUB_TOKEN" {
-  description = "GitHub Token for GitHub Actions to interact with GitHub API (e.g., for pushing to GHCR)"
-  type        = string
-  sensitive   = true
-}
-variable "GITHUB_ACTOR" {
-  description = "GitHub Actor (username) for GitHub Actions to identify itself when interacting with GitHub API"
-  type        = string
-  sensitive   = true
-}

@@ -6,32 +6,36 @@ on:
       full_image_name:
         description: "The full tag of the built image"
         value: ${{ jobs.build-and-test.outputs.full_image_name }}
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
 
+  workflow_dispatch: 
+env:
+  AWS_REGION: ${{ inputs.AWS_REGION }}
+  ECR_REPOSITORY: nt524
+  APP_NAME: juice-shop
+  ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
 jobs:
-  # --- DOCKER BUILD & CONTAINER SECURITY (Nhiệm vụ của Khôi) ---
   build-and-test:
     name: Build & Push Application
-    # Cập nhật: Chỉ chạy khi tất cả các công cụ quét bảo mật ở trên đã hoàn thành
     # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
-    # Sử dụng if: always() để đảm bảo phần Build vẫn chạy bất kể các job trước thành công hay thất bại
-      
-
-    if: always()
-    runs-on: ubuntu-latest # Mượn một máy ảo Ubuntu miễn phí của GitHub để chạy
+    # if: always()
+    runs-on: ubuntu-latest
     outputs:
       full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
-      current_version: ${{ steps.prep.outputs.VERSION }}
-      current_env: ${{ steps.prep.outputs.ENV }}
 
-    # Cấp quyền để ghi vào Container Registry và ký Image (Cần thiết cho tuần 4)
     permissions:
       contents: read
       packages: write
       id-token: write
-      security-events: write # BẮT BUỘC: Cấp quyền đẩy file SARIF lên tab Security của GitHub
+      security-events: write
 
     steps:
-      # Bước 1: Lấy code từ GitHub về cái máy ảo Ubuntu kia
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
@@ -39,90 +43,77 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: "npm"
           cache-dependency-path: app/NodeJS/juice-shop/package.json
+
+      - name: Nạp AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Prepare Image Name & Environment
         id: prep
+        env: 
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
           # SỬA LỖI TRỐNG BIẾN: Nếu env.ENVIRONMENT bị rỗng từ file Mẹ, tự động fallback về 'staging' để không gãy tag
           ENVIRONMENT="${{ env.ENVIRONMENT }}"
-          if [ -z "$ENVIRONMENT" ]; then ENVIRONMENT="staging"; fi
           echo "ENV=${ENVIRONMENT}" >> $GITHUB_OUTPUT
-          
-          REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "REPO_LOWER=${REPO_LOWER}" >> $GITHUB_ENV
+
           VERSION_TAG="${{ github.sha }}"
-          IMAGE_NAME=ghcr.io/${REPO_LOWER}/juice-shop:${VERSION_TAG}-${ENVIRONMENT}
-          
+          IMAGE_NAME=${{env.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:${{ env.APP_NAME }}-${VERSION_TAG}-${ENVIRONMENT}
+
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "VERSION=${VERSION_TAG}" >> $GITHUB_OUTPUT
 
       - name: Thiết lập Docker Buildx (BuildKit)
         uses: docker/setup-buildx-action@v3
-      
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Image
         uses: docker/build-push-action@v5
         with:
-          context: app/NodeJS/juice-shop/ # Đường dẫn đến thư mục chứa Dockerfile
-          load: true 
-          push: false 
+          context: app/NodeJS/juice-shop/
+          load: true
+          push: false
           tags: |
             ${{ env.IMAGE_NAME }}
-            ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-
-      # 🚀 KHÔI PHỤC: Quét Trivy xuất bản JSON
       - name: Run Trivy Vulnerability Scanner (JSON Output)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}"
           format: "json"
           output: "trivy-report.json"
-          exit-code: "0"  
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
 
-      # 🚀 KHÔI PHỤC: Quét Trivy xuất bản HTML cực đẹp để báo cáo giảng viên
-      - name: Run Trivy Vulnerability Scanner (HTML Output)
-      
-        run: |
-          mkdir -p trivy-templates
-          curl -sSfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -o trivy-templates/html.tpl
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD:/root/workspace \
-            aquasec/trivy:latest image \
-            --format template \
-            --template "@/root/workspace/trivy-templates/html.tpl" \
-            --output /root/workspace/trivy-report.html \
-            --severity CRITICAL,HIGH \
-            --ignore-unfixed \
-            ${{ env.IMAGE_NAME }}
+      - name: Run security scan on deployed application
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}"
+          format: "sarif"
+          output: "trivy-report.sarif"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
 
-      # 🚀 KHÔI PHỤC: Quét Trivy định dạng SARIF để đồng bộ lên Tab Security của GitHub Web
-      - name: Run Trivy Vulnerability Scanner (SARIF Format)
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v $PWD:/root/workspace \
-            aquasec/trivy:latest image \
-            --format sarif \
-            --output /root/workspace/trivy-report.sarif \
-            --severity CRITICAL,HIGH \
-            --ignore-unfixed \
-            ${{ env.IMAGE_NAME }}
+      - name: Upload Trivy JSON Report as Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-json-report
+          path: trivy-report.json
+
 
       - name: Upload Trivy SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
@@ -130,15 +121,17 @@ jobs:
         with:
           sarif_file: trivy-report.sarif
 
-      - name: Upload Trivy Security Reports
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: trivy-container-reports
-          path: |
-            trivy-report.json
-            trivy-report.html
-            trivy-report.sarif
+      # - name: Upload Trivy Security Reports
+      #   uses: actions/upload-artifact@v4
+      #   if: always()
+      #   with:
+      #     name: trivy-container-reports
+      #     path: |
+      #       trivy-report.json
+      #       trivy-report.html
+      #       trivy-report.sarif
+
+      
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -146,8 +139,7 @@ jobs:
       - name: Push Docker Image
         run: |
           docker push ${{ env.IMAGE_NAME }}
-          docker push ghcr.io/${{ env.REPO_LOWER }}/juice-shop:latest
-      
+
       - name: Generate SBOM with Syft
         # install syft and using Syft to generate SBOM
         run: |
@@ -157,9 +149,33 @@ jobs:
       - name: Upload SBOM Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sbom-report # Tên của file nén hiển thị trên giao diện GitHub
-          path: sbom.spdx.json # Tên file hoặc thư mục cần lưu trữ (phải khớp với tên file xuất ra ở trên)
-          retention-days: 7 # (Tùy chọn) Giữ file này trên GitHub trong 7 ngày rồi tự động xóa cho nhẹ
+          name: sbom-report
+          path: sbom.spdx.json
+          retention-days: 7
+      
+      - name: Push Cleaned Trivy Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          
+          # Lọc file JSON, chỉ giữ lại thông tin cơ bản của từng lỗ hổng tìm thấy để giảm dung lượng file xuống 90%
+          jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-report.json > trivy_short.json
+          
+          # Tạo cấu trúc payload cho Loki
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "trivy-container-scan" \
+            --arg img "${{ env.IMAGE_NAME }}" \
+            --arg repo "${{ github.repository }}" \
+            --slurpfile log trivy_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $img, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          # Gửi file đã được rút gọn lên Loki
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json
 
       - name: Sign the published Docker image
         env:
@@ -169,5 +185,3 @@ jobs:
           echo "$COSIGN_PRIVATE_KEY" > cosign.key
           cosign sign --yes --key cosign.key ${{ env.IMAGE_NAME }}
           rm cosign.key
-
-      

@@ -1,0 +1,88 @@
+name: DevSecOps Integrated Pipeline
+
+# 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
+on:
+  pull_request:
+    types:
+    - closed
+    paths-ignore:
+    - 'VERSION'
+    branches:
+    - dev
+  push:
+    branches:
+    - prod
+    - dev
+    - staging
+    paths-ignore:
+    - 'VERSION'
+    - 'README.md'
+
+  workflow_dispatch: 
+    
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  security-events: write
+  issues: write
+env:
+    AWS_REGION: us-east-1
+jobs:
+    Get-ENVIRONMENT:
+        name: Get Environment
+        runs-on: ubuntu-latest
+        outputs:
+            ENVIRONMENT: ${{ steps.set-env.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ steps.set-env.outputs.AWS_REGION }}
+        steps:
+            -   name: Publish Current Environment
+                id: set-env
+                run: |
+                    echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
+
+                    export ENVIRONMENT=$(echo "${{ github.ref }}" | sed -e "s/refs\\/heads\\///g")
+                    echo "ENVIRONMENT=${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
+    #===================================CI=================================== 
+  # # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
+  # Scan:
+  #   uses: ./.github/workflows/scan.yml
+
+    # # Gọi file Build chạy sau khi Scan xong
+    # Build:
+    #     # needs: [Scan, Get-ENVIRONMENT]
+    #     # if: always()
+    #     uses: ./.github/workflows/build.yml
+    #     secrets: inherit # Kế thừa các secret từ repo
+      
+    #===================================CD===================================
+
+    Provision:
+        uses: ./.github/workflows/provision.yml
+        needs: Get-ENVIRONMENT
+        with:
+            ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
+        secrets: inherit
+    # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
+    # Deploy:
+    #     needs: [Provision, Build, Get-ENVIRONMENT]
+    #     uses: ./.github/workflows/deploy.yml
+    #     with:
+    #         full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
+    #         CLUSTER_NAME: juice-shop-cluster-staging
+    #         K8S_NAMESPACE: app-namespace-staging
+    #         AWS_REGION: us-east-1
+    #         ENVIRONMENT: staging
+    #         # ENVIRONMENT: ${{needs.Provision.outputs.ENVIRONMENT}}
+    #         # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
+    #         # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
+    #         # full_image_name: ${{needs.Build.outputs.full_image_name}}
+            
+    #         # AWS_REGION: ${{needs.Get-ENVIRONMENT.outputs.AWS_REGION}}
+    #     secrets: inherit
+
+  # Dast-scan:
+  #   needs: Deploy
+  #   uses: ./.github/workflows/zap.yml
+  #   secrets: inherit
