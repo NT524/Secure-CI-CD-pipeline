@@ -33,11 +33,11 @@ jobs:
         name: Get Environment
         runs-on: ubuntu-latest
         outputs:
-            ENVIRONMENT: ${{ steps.current-env.outputs.ENVIRONMENT }}
-            AWS_REGION: ${{ steps.current-env.outputs.AWS_REGION }}
+            ENVIRONMENT: ${{ steps.set-env.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ steps.set-env.outputs.AWS_REGION }}
         steps:
             -   name: Publish Current Environment
-                id: current-env
+                id: set-env
                 run: |
                     echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 

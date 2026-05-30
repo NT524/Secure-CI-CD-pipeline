@@ -29,9 +29,9 @@ on:
         type: string
     outputs:
       CLUSTER_NAME: 
-        value: ${{ jobs.Deploy-to-eks.outputs.CLUSTER_NAME }}
+        value: ${{ jobs.Provision.outputs.CLUSTER_NAME }}
       K8S_NAMESPACE:
-        value: ${{ jobs.Deploy-to-eks.outputs.K8S_NAMESPACE }}
+        value: ${{ jobs.Provision.outputs.K8S_NAMESPACE }}
 
 
 permissions:
@@ -121,13 +121,12 @@ jobs:
         run: |
           echo "CLUSTER_NAME=${{ env.cluster_name }}-${{ env.ENVIRONMENT }}" >> $GITHUB_OUTPUT
           echo "K8S_NAMESPACE=${{ env.namespace }}-${{ env.ENVIRONMENT }}" >> $GITHUB_OUTPUT
-          echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 
       - name: Set up Environment Variables for Terraform
         run: |
-          echo "TF_VAR_aws_region=${{ env.AWS_REGION }}" >> $GITHUB_ENV
+          echo "TF_VAR_aws_region=${{ inputs.AWS_REGION }}" >> $GITHUB_ENV
           echo "TF_VAR_cluster_name=${{ env.cluster_name }}" >> $GITHUB_ENV
-          echo "TF_VAR_environment=${{ env.ENVIRONMENT }}" >> $GITHUB_ENV
+          echo "TF_VAR_environment=${{ inputs.ENVIRONMENT }}" >> $GITHUB_ENV
           echo "TF_VAR_ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}" >> $GITHUB_ENV
           echo "TF_VAR_ARN_POLICY=${{ secrets.ARN_POLICY }}" >> $GITHUB_ENV
           echo "TF_IN_AUTOMATION=1" >> $GITHUB_ENV
