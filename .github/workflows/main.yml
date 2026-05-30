@@ -33,7 +33,7 @@ jobs:
         name: Get Environment
         runs-on: ubuntu-latest
         outputs:
-            ENVIRONMENT: ${{ steps.set-env.outputs.ENVIRONMENT }}
+            ENVIRONMENT: ${{ steps.current-env.outputs.ENVIRONMENT }}
             AWS_REGION: ${{ steps.current-env.outputs.AWS_REGION }}
         steps:
             -   name: Publish Current Environment
@@ -42,7 +42,6 @@ jobs:
                     echo "AWS_REGION=${{ env.AWS_REGION }}" >> $GITHUB_OUTPUT
 
                     export ENVIRONMENT=$(echo "${{ github.ref }}" | sed -e "s/refs\\/heads\\///g")
-                    echo "ENVIRONMENT=${ENVIRONMENT}" >> $GITHUB_ENV
                     echo "ENV=${ENVIRONMENT}" >> "$GITHUB_OUTPUT"
     #===================================CI=================================== 
   # # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
