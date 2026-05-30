@@ -94,5 +94,5 @@ jobs:
         needs: Get-ENVIRONMENT
         uses: ./.github/workflows/zap.yml
         with:
-            targets: http://a465575b2b1eb432a831f4fb6439e9d9-1979129099.us-east-1.elb.amazonaws.com
+            target: http://a465575b2b1eb432a831f4fb6439e9d9-1979129099.us-east-1.elb.amazonaws.com
         secrets: inherit
