@@ -147,10 +147,6 @@ jobs:
             -backend-config="dynamodb_table=${{ env.DYNAMODB_TABLE }}"
           
 
-      - name: Terraform Refresh State
-        working-directory: terraform
-        run: terraform refresh
-
       - name: Terraform Plan EKS
         id: tf-plan-eks
         working-directory: terraform
