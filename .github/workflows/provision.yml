@@ -1,21 +1,21 @@
 name: Provision 
 
 on:
-  pull_request:
-    types:
-    - closed
-    paths-ignore:
-    - 'VERSION'
-    branches:
-    - dev
-  push:
-    branches:
-    - prod
-    - dev
-    - staging
-    paths-ignore:
-    - 'VERSION'
-    - 'README.md'
+  # pull_request:
+  #   types:
+  #   - closed
+  #   paths-ignore:
+  #   - 'VERSION'
+  #   branches:
+  #   - dev
+  # push:
+  #   branches:
+  #   - prod
+  #   - dev
+  #   - staging
+  #   paths-ignore:
+  #   - 'VERSION'
+  #   - 'README.md'
 
   workflow_dispatch:
 
@@ -67,6 +67,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
+
       - name: Nạp AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -147,9 +148,9 @@ jobs:
         id: tf-plan-eks
         working-directory: terraform
         run: |
-
-          terraform plan -detailed-exitcode -no-color -out tfplan && exitcode=0 || exitcode=$?
-          
+          exitcode=0
+          terraform plan -detailed-exitcode -no-color -out tfplan 
+          exitcode=$?
           
           if [ $exitcode -eq 1 ]; then
             echo "Terraform Plan Failed!"
