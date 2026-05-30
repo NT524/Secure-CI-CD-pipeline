@@ -17,7 +17,7 @@ output "aws_region" {
 
 output "cluster_name" {
   description = "The name of the EKS cluster"
-  value       = local.cluster_name
+  value       = local.K8S_NAMESPACE
 }
 
 output "node_group_arns" {
