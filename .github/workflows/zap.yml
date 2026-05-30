@@ -41,7 +41,7 @@ jobs:
             }' || echo "User may already exist, continuing to login..."
 
           echo "==> Logging in to get token..."
-          JWT_TOKEN="token:$(curl -s -X POST "$TARGET_URL/rest/user/login" \
+          JWT_TOKEN="$(curl -s -X POST "$TARGET_URL/rest/user/login" \
             -H "Content-Type: application/json" \
             -d '{"email": "dast_tester@juice-sh.op", "password": "SecurePassword123!"}' | jq -r '.authentication.token // empty')"
 
