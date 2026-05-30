@@ -150,9 +150,9 @@ jobs:
 
       - name: Terraform Apply Infrastructure
         working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}}
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
         run: |
-            terraform apply -auto-approve tfplan
+            terraform apply -auto-approve
 
 
       
