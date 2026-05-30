@@ -73,6 +73,7 @@ jobs:
 
                   # Áp dụng manifest đã cập nhật
                   kubectl apply -f k8s/ -n ${{ env.K8S_NAMESPACE }}
+                  kubectl get pods -n ${{ env.K8S_NAMESPACE }} 
 
 
             - name: Verify deployment
