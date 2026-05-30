@@ -23,8 +23,4 @@ variable "ARN_POLICY" {
   type        = string
 }
 
-variable "K8S_NAMESPACE" {
-  description = "Kubernetes namespace to deploy the application"
-  type        = string
-}
 
