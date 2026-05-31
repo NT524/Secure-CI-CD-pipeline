@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.5.0
+  rev: v4.6.0
   hooks:
   - id: trailing-whitespace
   - id: end-of-file-fixer
@@ -10,7 +10,7 @@ repos:
 - repo: https://github.com/gitleaks/gitleaks
   rev: v8.18.1
   hooks:
-  - id: gitleaks-system
+  - id: gitleaks
 
 - repo: https://github.com/Yelp/detect-secrets
   rev: v1.4.0
@@ -18,6 +18,7 @@ repos:
   - id: detect-secrets
     args: [ '--baseline', '.secrets.baseline' ]
     exclude: package-lock.json
+
 - repo: https://github.com/semgrep/semgrep
   rev: v1.65.0
   hooks:
