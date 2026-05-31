@@ -146,12 +146,12 @@
 
         - name: Apply Gatekeeper policy gate
           run: |
-            sed -i "s|{{ ECR_REGISTRY }}|${{ steps.login-ecr.outputs.registry }}|g" policy/gatekeeper/provider-deployment.yaml
-            sed -i "s|{{ ECR_REPOSITORY }}|${{ env.ECR_REPOSITORY }}|g" policy/gatekeeper/provider-deployment.yaml
-            sed -i "s|{{ AWS_REGION }}|${{ env.AWS_REGION }}|g" policy/gatekeeper/provider-deployment.yaml
-            sed -i "s|{{ CLUSTER_NAME }}|${{ env.CLUSTER_NAME }}|g" policy/gatekeeper/provider-deployment.yaml
-            sed -i "s|{{ K8S_NAMESPACE }}|${{ env.K8S_NAMESPACE }}|g" policy/gatekeeper/provider-deployment.yaml
-
+            sed -i "s|{{ ECR_REGISTRY }}|${{ steps.login-ecr.outputs.registry }}|g" policy/gatekeeper/*.yaml
+            sed -i "s|{{ ECR_REPOSITORY }}|${{ env.ECR_REPOSITORY }}|g" policy/gatekeeper/*.yaml
+            sed -i "s|{{ AWS_REGION }}|${{ env.AWS_REGION }}|g" policy/gatekeeper/*.yaml
+            sed -i "s|{{ CLUSTER_NAME }}|${{ env.CLUSTER_NAME }}|g" policy/gatekeeper/*.yaml
+            sed -i "s|{{ K8S_NAMESPACE }}|${{ env.K8S_NAMESPACE }}|g" policy/gatekeeper/*.yaml
+            
             # 1. Khởi tạo Template và Provider trước
             kubectl apply -f policy/gatekeeper/constraint-template.yaml
             kubectl apply -f policy/gatekeeper/provider.yaml
