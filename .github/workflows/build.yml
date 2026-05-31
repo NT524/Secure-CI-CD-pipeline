@@ -16,7 +16,7 @@ env:
   NODE_VERSION: 24
   AWS_REGION: ${{ inputs.AWS_REGION }}
   ECR_REPOSITORY: nt524
-  APP_NAME: juice-shop
+  APP_NAME: app
 jobs:
   build-and-test:
     name: Build & Push Application
@@ -85,7 +85,7 @@ jobs:
           image-ref: "${{ env.IMAGE_NAME }}"
           format: "json"
           output: "trivy-report.json"
-          exit-code: "0"
+          exit-code: "1"
           ignore-unfixed: true
           vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
