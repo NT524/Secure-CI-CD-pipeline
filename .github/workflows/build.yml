@@ -135,29 +135,28 @@ jobs:
           path: sbom.spdx.json
           retention-days: 7
       
-      - name: Push Trivy Metrics to Prometheus Pushgateway
+      - name: Push Trivy Metrics to Grafana Prometheus
         if: always()
         run: |
           REPO="${{ github.repository }}"
-          IMAGE="${{ env.ECR_REPOSITORY }}/${{ env.APP_NAME }}:${{ github.sha }}"
+          IMAGE="${{ steps.prep.outputs.IMAGE_NAME }}"
 
-          if [ -f "trivy-report.json" ]; then
-            # Đếm số lượng lỗ hổng
-            NUM_VULNS=$(jq '.Results[].Vulnerabilities | length' trivy-report.json || echo 0)
-            STATUS=$([ $NUM_VULNS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+          if [ -f "trivy_short.json" ]; then
+            NUM_VULNS=$(jq 'length' trivy_short.json)
           else
             NUM_VULNS=0
-            STATUS="SUCCESS"
           fi
-          
-          # Đóng gói theo chuẩn Prometheus
-          cat <<EOF > metrics.txt
-          # HELP devsecops_image_vulnerabilities_total Total vulnerabilities found in container image
-          # TYPE devsecops_image_vulnerabilities_total gauge
-          devsecops_image_vulnerabilities_total{repo="$REPO", image="$IMAGE", scan_type="container-scan", status="$STATUS"} $NUM_VULNS
-          EOF
 
-          curl -k -X POST --data-binary @metrics.txt ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }} -u "${{ secrets.PROMETHEUS_AUTH }}"
+          # Chuẩn bị payload dạng Influx Line Protocol
+          PAYLOAD="security_scan,repo=${REPO},image=${IMAGE},scan_type=container-scan vulnerabilities_count=${NUM_VULNS}"
+
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"
 
       - name: Sign the published Docker image
         env:
