@@ -1,51 +1,140 @@
 name: "DAST: ZAP Active Scan (Juice Shop Test)"
 
 on:
-    workflow_call:
-    workflow_dispatch:
-    schedule:
-        - cron: "0 18 * * 6"
+  workflow_call:
+    inputs:
+      target:
+        required: true
+        type: string
+
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * 6"
 
 jobs:
-    dast_scan:
-        name: OWASP ZAP DAST Scan
-        runs-on: ubuntu-latest
-        permissions:
-            issues: write
-            contents: read
+  dast_scan:
+    name: OWASP ZAP DAST Scan
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read  
+    env:
+      target: ${{ inputs.target }}
 
-        steps:
-            - name: Checkout Code
-              uses: actions/checkout@v4
-              
-            - name: Chạy OWASP ZAP Full (Active) Scan
-              uses: zaproxy/action-full-scan@v0.12.0
-              with:
-                  docker_name: "451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging"
-                  token: ${{ secrets.GITHUB_TOKEN }}
-                  
-                  target: "http://afd4675e2a8dd49d99b0e04a5aeaaaaf-19955265.us-east-1.elb.amazonaws.com/"
-                  
-                  rules_file_name: ".zap/rules.tsv" 
-                  
-                  issue_title: "🚨 DAST Alert: Vulnerabilities found in Juice Shop"
-                  fail_action: true
-                  
-                  # [TIÊU CHÍ 3 & 5]: Giới hạn thời gian (-m 5) VÀ Thêm Authentication Header cho test account
-                  # ZAP Replacer sẽ tự động chèn header 'Authorization: Bearer <token>' vào mọi request
-                  cmd_options: >-
-                    -a -m 5
-                    -z "-config replacer.full_list(0).description=AuthHeader
-                    -config replacer.full_list(0).enabled=true
-                    -config replacer.full_list(0).matchtype=req_header
-                    -config replacer.full_list(0).matchstr=Authorization
-                    -config replacer.full_list(0).replacement=\"Bearer ${{ secrets.TEST_TOKEN }}\""
-                  
-                  artifact_name: "zap-scan-report"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-            - name: Lưu trữ báo cáo (Gather Findings)
-              if: always()
-              uses: actions/upload-artifact@v4
-              with:
-                  name: zap-scan-report-html
-                  path: report_html.html
+      - name: Generate JWT Token for ZAP Authentication
+        id: create_token
+        run: |
+          TARGET_URL="${{ env.target }}"
+
+          curl -s -X POST "$TARGET_URL/api/Users" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "email": "dast_tester@juice-sh.op",
+              "password": "SecurePassword123!",
+              "passwordRepeat": "SecurePassword123!",
+              "securityQuestion": {"id": 1, "question": "Your eldest siblings middle name?"},
+              "securityAnswer": "DevSecOps"
+            }' || echo "User may already exist, continuing to login..."
+
+          echo "==> Logging in to get token..."
+          JWT_TOKEN="$(curl -s -X POST "$TARGET_URL/rest/user/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email": "dast_tester@juice-sh.op", "password": "SecurePassword123!"}' | jq -r '.authentication.token // empty')"
+
+          if [ -z "$JWT_TOKEN" ] || [ "$JWT_TOKEN" == "null" ]; then
+            echo "❌ Failed to obtain JWT token for ZAP authentication. Aborting scan."
+            exit 1
+          fi
+          echo "::add-mask::$JWT_TOKEN"
+          echo "JWT_TOKEN=$JWT_TOKEN" >> $GITHUB_ENV
+
+      - name: Chạy OWASP ZAP Full (Active) Scan
+        uses: zaproxy/action-full-scan@v0.13.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: ${{ env.target }}
+          rules_file_name: ".zap/rules.tsv"
+          issue_title: "🚨 DAST Alert: Vulnerabilities found in application"
+          fail_action: false
+          cmd_options: >-
+            -a -j
+            -z "-config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement='Authorization: Bearer ${{ env.JWT_TOKEN }}'"
+          artifact_name: "zap-scan-report"
+
+      - name: Lưu trữ báo cáo (Gather Findings)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-scan-report-files
+          path: |
+            report_html.html
+            report_json.json
+
+      - name: Evaluate Vulnerabilities & Block Promotion on High/Critical
+        id: evaluate_dast
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f "report_json.json" ]; then
+            echo "❌ Report file report_json.json not found!"
+            exit 1
+          fi
+
+          # Filter alerts with riskcode == "3" (High Risk in ZAP)
+          HIGH_ALERTS=$(jq '[.site[].alerts[]? | select(.riskcode == "3")]' report_json.json)
+          COUNT=$(echo "$HIGH_ALERTS" | jq 'length')
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "🚨 Detected $COUNT High/Critical vulnerabilities. Creating an issue and blocking promotion!"
+            
+            # Initialize Issue Body
+            ISSUE_BODY="## 🚨 DAST Scan Blocked Promotion\n\n**Scan Target:** ${{ env.target }}\nDetected **$COUNT** severe vulnerabilities (High/Critical) from OWASP ZAP.\n\n### Quick Details (Top 5):\n"
+            
+            # Extract top 5 vulnerabilities to provide context without overloading the payload
+            DETAILS=$(echo "$HIGH_ALERTS" | jq -r '.[0:5] | map("- **\(.alert)**\n  - *Risk/CWE*: \(.riskdesc) / CWE-\(.cweid)\n  - *Path*: `\(.instances[0].uri)`") | join("\n\n")')
+            
+            ISSUE_BODY="$ISSUE_BODY$DETAILS\n\n---\n*Please download the \`zap-scan-report\` artifact from the GitHub Actions run to view the full HTML/JSON reports.*"
+            
+            # Create GitHub Issue using GitHub CLI
+            gh issue create \
+              --title "🚨 DAST Block: Severe vulnerabilities detected on ${{ env.target }}" \
+              --body "$ISSUE_BODY" \
+              --label "security,dast"
+            
+            # MANDATORY: Exit 1 to mark the workflow as Failed, blocking deployment/promotion
+            exit 1
+          else
+            echo "✅ No High/Critical vulnerabilities detected. Proceeding with promotion."
+          fi
+
+      - name: Push ZAP Scan Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+
+          # Extract concise alert information to send to Loki
+          if [ -f "report_json.json" ]; then
+            jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid, wascid}]' report_json.json > zap_short.json
+          else
+            echo '[]' > zap_short.json
+          fi
+
+          # Create standardized payload for Loki
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "zap-dast-scan" \
+            --arg target "${{ env.target }}" \
+            --arg repo "${{ github.repository }}" \
+            --slurpfile log zap_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          # Send payload to Loki
+          curl -k -H "Content-Type: application/json" \
+              -u "${{ secrets.LOKI_AUTH }}" \
+              -X POST ${{ secrets.LOKI_URL }} \
+              -d @loki_payload.json

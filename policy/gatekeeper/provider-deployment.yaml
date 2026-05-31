@@ -19,32 +19,44 @@ spec:
         app: cosign-gatekeeper-provider
     spec:
       imagePullSecrets:
-        - name: ghcr-registry-auth
+      - name: ecr-registry-auth
       containers:
-        - name: cosign-gatekeeper-provider
-          image: ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
-          imagePullPolicy: Always
-          ports:
-            - containerPort: 8090
-          volumeMounts:
-            - name: cosign-key
-              mountPath: /keys
-              readOnly: true
-            - name: registry-auth
-              mountPath: /root/.docker
-              readOnly: true
-      volumes:
+      - name: cosign-gatekeeper-provider
+        image: "{{ ECR_REGISTRY }}/{{ ECR_REPOSITORY }}/cosign-gatekeeper-provider:latest"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8090
+        env:
+        - name: AWS_REGION
+          value: "{{ AWS_REGION }}"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: access-key
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: secret-key
+        volumeMounts:
         - name: cosign-key
-          secret:
-            secretName: cosign-public-key
-        # 🛠️ ĐÃ SỬA: Ánh xạ chuẩn từ định dạng K8s (.dockerconfigjson) sang file config.json truyền thống
+          mountPath: /keys
+          readOnly: true
         - name: registry-auth
-          secret:
-            secretName: ghcr-registry-auth
-            items:
-              - key: .dockerconfigjson
-                path: config.json
-            optional: true
+          mountPath: /root/.docker
+          readOnly: true
+      volumes:
+      - name: cosign-key
+        secret:
+          secretName: cosign-public-key
+      - name: registry-auth
+        secret:
+          secretName: ecr-registry-auth
+          items:
+          - key: .dockerconfigjson
+            path: config.json
+          optional: true
 ---
 apiVersion: v1
 kind: Service
@@ -55,5 +67,5 @@ spec:
   selector:
     app: cosign-gatekeeper-provider
   ports:
-    - port: 8090
-      targetPort: 8090
+  - port: 8090
+    targetPort: 8090

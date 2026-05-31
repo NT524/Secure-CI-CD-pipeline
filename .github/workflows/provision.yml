@@ -1,24 +1,8 @@
 name: Provision 
 
 on:
-  # pull_request:
-  #   types:
-  #   - closed
-  #   paths-ignore:
-  #   - 'VERSION'
-  #   branches:
-  #   - dev
-  # push:
-  #   branches:
-  #   - prod
-  #   - dev
-  #   - staging
-  #   paths-ignore:
-  #   - 'VERSION'
-  #   - 'README.md'
 
   workflow_dispatch:
-
   workflow_call:
     inputs:
       ENVIRONMENT:
@@ -47,7 +31,7 @@ env:
   S3_BUCKET: ${{ secrets.S3_BUCKET }}
   S3_REGION: ${{ secrets.S3_REGION }}
   DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
-  cluster_name: juice-shop-cluster
+  cluster_name: app-cluster
   ENVIRONMENT: ${{inputs.ENVIRONMENT}}
   
 
@@ -65,8 +49,6 @@ jobs:
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
 
       - name: Nạp AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -149,9 +131,9 @@ jobs:
         run: |
           set +e
           exitcode=0
-          terraform plan -detailed-exitcode -no-color -out tfplan || exitcode=$?
+          terraform plan -detailed-exitcode -no-color -out tfplan 
+          exitcode=$?
           set -e
-          echo "Terraform plan finished with exit code: $exitcode"
 
           if [ $exitcode -eq 1 ]; then
             echo "Terraform Plan Failed!"
@@ -165,12 +147,12 @@ jobs:
             echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
             exit 0
           fi
-
+          
       - name: Terraform Apply Infrastructure
         working-directory: terraform
-        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2'}}
+        if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}
         run: |
-            terraform apply -auto-approve tfplan
+            terraform apply -auto-approve
 
 
       

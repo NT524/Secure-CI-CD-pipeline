@@ -6,18 +6,18 @@ spec:
   enforcementAction: deny
   match:
     namespaces:
-      - isolated-staging 
+    - "{{ K8S_NAMESPACE }}"
     kinds:
-      - apiGroups: [""]
-        kinds: ["Pod"]
-      - apiGroups: ["apps"]
-        kinds: ["Deployment", "ReplicaSet", "StatefulSet", "DaemonSet"]
-      - apiGroups: ["batch"]
-        kinds: ["Job", "CronJob"]
+    - apiGroups: [ "" ]
+      kinds: [ "Pod" ]
+    - apiGroups: [ "apps" ]
+      kinds: [ "Deployment", "ReplicaSet", "StatefulSet", "DaemonSet" ]
+    - apiGroups: [ "batch" ]
+      kinds: [ "Job", "CronJob" ]
   parameters:
     provider: cosign-gatekeeper-provider
-    
+
     # Chỉ bắt buộc quét chữ ký với các Image thuộc hệ thống Registry của nhóm
     # Điều này giúp các Pod hệ thống mặc định của AWS chạy bình thường mà không bị Gatekeeper chặn nhầm (False Positive)
     requiredRepositoryPrefixes:
-      - "ghcr.io/nt524/secure-ci-cd-pipeline"
+    - "{{ ECR_REGISTRY }}/{{ ECR_REPOSITORY }}"
