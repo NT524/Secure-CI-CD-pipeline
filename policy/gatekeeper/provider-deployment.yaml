@@ -22,7 +22,7 @@ spec:
       - name: ecr-registry-auth
       containers:
       - name: cosign-gatekeeper-provider
-        image: "{{ ECR_REGISTRY }}/{{ ECR_REPOSITORY }}/cosign-gatekeeper-provider:latest"
+        image: "{{ ECR_REGISTRY }}/{{ ECR_REPOSITORY }}:cosign-gatekeeper-provider-latest"
         imagePullPolicy: Always
         ports:
         - containerPort: 8090
