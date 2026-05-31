@@ -71,7 +71,7 @@ jobs:
       - name: Build Image
         uses: docker/build-push-action@v5
         with:
-          context: app/NodeJS/juice-shop/
+          context: app/
           load: true
           push: false
           tags: |
