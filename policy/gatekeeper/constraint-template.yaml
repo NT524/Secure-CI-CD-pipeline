@@ -1,82 +1,134 @@
-# CẤU HÌNH ĐƯỜNG TRUYỀN KUBECTL ĐẾN CỤM AWS EKS
-- name: Update Kubeconfig cho AWS EKS
-  run: aws eks update-kubeconfig --name ${{ env.cluster_name }}-${{ env.ENVIRONMENT }} --region ${{ env.AWS_REGION }}
+apiVersion: templates.gatekeeper.sh/v1beta1
+kind: ConstraintTemplate
+metadata:
+  name: k8srequiredimagesignatures
+spec:
+  crd:
+    spec:
+      names:
+        kind: K8sRequiredImageSignatures
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            provider:
+              type: string
+            exemptImages:
+              type: array
+              items:
+                type: string
+            requiredRepositoryPrefixes:
+              type: array
+              items:
+                type: string
+  targets:
+  - target: admission.k8s.gatekeeper.sh
+    rego: |
+      package k8srequiredimagesignatures
 
-# TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
-- name: Install Gatekeeper with external data enabled
-  run: |
-    kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
-    kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
-    kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
-    kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
-    kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+      import future.keywords.if
+      import future.keywords.in
 
-    echo "⏳ Đợi 20 giây để Gatekeeper Webhook khởi động mạng hoàn tất..."
-    sleep 20
+      violation[{"msg": msg}] {
+        image := relevant_images[_]
+        response := provider_response(image)
+        count(response.errors) > 0
+        msg := sprintf("Xác thực chữ ký thất bại cho image %q: lỗi từ nhà cung cấp: %v", [image, response.errors])
+      }
 
-- name: Sync Cosign public key and registry auth into cluster
-  env:
-    COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
-    GHCR_USERNAME: ${{ github.actor }}
-    GHCR_PAT: ${{ secrets.GHCR_PAT }}
-  run: |
-    kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+      violation[{"msg": msg}] {
+        image := relevant_images[_]
+        response := provider_response(image)
+        count(object.get(response, "system_error", "")) > 0
+        msg := sprintf("Xác thực chữ ký thất bại cho image %q: %s", [image, response.system_error])
+      }
 
-    # 1. Tạo khóa Public Key cho Cosign
-    printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
-    kubectl -n cosign-system create secret generic cosign-public-key \
-      --from-file=cosign.pub=./cosign.pub \
-      --dry-run=client -o yaml | kubectl apply -f -
+      violation[{"msg": msg}] {
+        image := relevant_images[_]
+        response := provider_response(image)
+        result := response.responses[_]
+        result[0] == image
+        result[2] != ""
+        msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, result[2]])
+      }
 
-    # 2. 🛠️ THÊM DÒNG NÀY: Xóa cứng Secret cũ đang bị kẹt định dạng để tránh lỗi "field is immutable"
-    kubectl -n cosign-system delete secret ghcr-registry-auth --ignore-not-found=true
+      violation[{"msg": msg}] {
+        image := relevant_images[_]
+        response := provider_response(image)
+        count(response.errors) == 0
+        count(object.get(response, "system_error", "")) == 0
+        result := response.responses[_]
+        result[0] == image
+        verified := object.get(result[1], "verified", false)
+        not verified
+        detail := object.get(result[1], "message", "Cosign không thể xác thực chữ ký")
+        msg := sprintf("Image %q bị từ chối vì chưa được ký hoặc chữ ký Cosign không tin cậy: %s", [image, detail])
+      }
 
-    # 3. Tiến hành đúc Secret định dạng docker-registry mới tinh hoàn toàn hợp lệ
-    kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
-      --docker-server=ghcr.io \
-      --docker-username="$GHCR_USERNAME" \
-      --docker-password="$GHCR_PAT" \
-      --dry-run=client -o yaml | kubectl apply -f -
-      
-    rm -f cosign.pub
+      violation[{"msg": msg}] {
+        image := relevant_images[_]
+        response := provider_response(image)
+        count(response.errors) == 0
+        count(object.get(response, "system_error", "")) == 0
+        not has_response_for_image(response, image)
+        msg := sprintf("Image %q bị từ chối vì nhà cung cấp dịch vụ xác thực Cosign không trả về quyết định", [image])
+      }
 
-- name: Log in to GitHub Container Registry for Provider
-  uses: docker/login-action@v3
-  with:
-    registry: ghcr.io
-    username: ${{ github.actor }}
-    password: ${{ secrets.GITHUB_TOKEN }}
+      relevant_images[image] {
+        image := all_images[_]
+        should_verify(image)
+        not is_exempt(image)
+      }
 
-- name: Build and Push cosign verification provider image to GHCR
-  run: |
-    docker build -t ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest policy/cosign-provider
-    docker push ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
+      all_images[image] {
+        spec := pod_spec
+        container := object.get(spec, "containers", [])[_]
+        image := container.image
+      }
 
-- name: Apply Gatekeeper policy gate
-  run: |
-    echo "🧹 THÊM BƯỚC NÀY: Dọn sạch luật chặn cũ để giải phóng cụm, tránh lỗi tự chặn chính mình (Deadlock)"
-    kubectl delete -f policy/gatekeeper/constraint.yaml --ignore-not-found=true
-    kubectl delete -f policy/gatekeeper/constraint-template.yaml --ignore-not-found=true
+      all_images[image] {
+        spec := pod_spec
+        container := object.get(spec, "initContainers", [])[_]
+        image := container.image
+      }
 
-    echo "🚀 Tiến hành deploy Pod Provider mới..."
-    kubectl apply -f policy/gatekeeper/provider-deployment.yaml
-    kubectl apply -f policy/gatekeeper/provider.yaml
+      should_verify(image) {
+        prefixes := object.get(input.parameters, "requiredRepositoryPrefixes", [])
+        count(prefixes) == 0
+      }
 
-    echo "⏳ ĐỢI 45 GIÂY để Pod Provider mới chính thức lên đĩa và mở cổng 8090..."
-    sleep 45
+      should_verify(image) {
+        prefixes := object.get(input.parameters, "requiredRepositoryPrefixes", [])
+        prefix := prefixes[_]
+        startswith(image, prefix)
+      }
 
-    echo "=== Kiểm tra trạng thái Pod Provider ==="
-    kubectl get pods -n cosign-system
+      is_exempt(image) {
+        exempt := object.get(input.parameters, "exemptImages", [])
+        pattern := exempt[_]
+        startswith(image, trim_suffix(pattern, "*"))
+      }
 
-    echo "🔒 Tái áp dụng luật chặn bảo mật sau khi lính gác đã sống dậy chuẩn chỉ"
-    kubectl apply -f policy/gatekeeper/constraint-template.yaml
-    for i in $(seq 1 30); do
-      if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
-        break
-      fi
-      sleep 2
-    done
-    kubectl apply -f policy/gatekeeper/constraint.yaml
+      provider_response(image) := response {
+        response := external_data({
+          "provider": object.get(input.parameters, "provider", "cosign-gatekeeper-provider"),
+          "keys": [image],
+        })
+      }
 
-    echo "⏳ Đợi 15 giây để luật kiểm duyệt đồng bộ vào nhân Gatekeeper..."
-    sleep 15
+      has_response_for_image(response, image) {
+        result := response.responses[_]
+        result[0] == image
+      }
+
+      pod_spec := input.review.object.spec if {
+        input.review.kind.kind == "Pod"
+      }
+
+      pod_spec := input.review.object.spec.template.spec if {
+        input.review.kind.kind in {"Deployment", "ReplicaSet", "StatefulSet", "DaemonSet", "Job"}
+      }
+
+      pod_spec := input.review.object.spec.jobTemplate.spec.template.spec if {
+        input.review.kind.kind == "CronJob"
+      }
