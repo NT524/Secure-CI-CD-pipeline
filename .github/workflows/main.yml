@@ -2,6 +2,9 @@ name: DevSecOps Integrated Pipeline
 
 on:
   push:
+    branches:
+      - "staging"
+      - "prod"
     paths-ignore:
       - "README.md"
       - "docs/**"
