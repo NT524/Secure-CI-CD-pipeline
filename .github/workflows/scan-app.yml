@@ -43,29 +43,29 @@ jobs:
         with:
           sarif_file: semgrep-report.sarif
 
-      - name: 7. Push Semgrep Report to Grafana Loki
-        if: always()
-        run: |
-          TIMESTAMP=$(date +%s%N)
-
-          if [ -f "semgrep-report.sarif" ]; then
-            jq '[.runs[].results[]? | {ruleId, level, message: .message.text, location: .locations[0].physicalLocation.artifactLocation.uri}]' semgrep-report.sarif > semgrep_short.json
-          else
-            echo '[]' > semgrep_short.json
-          fi
-
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "semgrep-sast-scan" \
-            --arg repo "${{ github.repository }}" \
-            --slurpfile log semgrep_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+      # - name: 7. Push Semgrep Report to Grafana Loki
+      #   if: always()
+      #   run: |
+      #     TIMESTAMP=$(date +%s%N)
+      #
+      #     if [ -f "semgrep-report.sarif" ]; then
+      #       jq '[.runs[].results[]? | {ruleId, level, message: .message.text, location: .locations[0].physicalLocation.artifactLocation.uri}]' semgrep-report.sarif > semgrep_short.json
+      #     else
+      #       echo '[]' > semgrep_short.json
+      #     fi
+      #
+      #     jq -n \
+      #       --arg ts "$TIMESTAMP" \
+      #       --arg job "github-actions" \
+      #       --arg scan_type "semgrep-sast-scan" \
+      #       --arg repo "${{ github.repository }}" \
+      #       --slurpfile log semgrep_short.json \
+      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+      #
+      #     curl -k -H "Content-Type: application/json" \
+      #          -u "${{ secrets.LOKI_AUTH }}" \
+      #          -X POST ${{ secrets.LOKI_URL }} \
+      #          -d @loki_payload.json
 
   # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
   secret-scan:
@@ -108,26 +108,26 @@ jobs:
             trufflehog-report.json
             trufflehog-report.html
 
-      - name: 5. Push TruffleHog Report to Grafana Loki
-        if: always()
-        run: |
-          TIMESTAMP=$(date +%s%N)
-
-          if [ -s "trufflehog-report.json" ]; then
-            jq -s '[.[] | {source_metadata, detector_name, decoder_name, verified, raw: (.raw | tostring)}]' trufflehog-report.json > trufflehog_short.json
-          else
-            echo '[]' > trufflehog_short.json
-          fi
-
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "trufflehog-secret-scan" \
-            --arg repo "${{ github.repository }}" \
-            --slurpfile log trufflehog_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+      # - name: 5. Push TruffleHog Report to Grafana Loki
+      #   if: always()
+      #   run: |
+      #     TIMESTAMP=$(date +%s%N)
+      #
+      #     if [ -s "trufflehog-report.json" ]; then
+      #       jq -s '[.[] | {source_metadata, detector_name, decoder_name, verified, raw: (.raw | tostring)}]' trufflehog-report.json > trufflehog_short.json
+      #     else
+      #       echo '[]' > trufflehog_short.json
+      #     fi
+      #
+      #     jq -n \
+      #       --arg ts "$TIMESTAMP" \
+      #       --arg job "github-actions" \
+      #       --arg scan_type "trufflehog-secret-scan" \
+      #       --arg repo "${{ github.repository }}" \
+      #       --slurpfile log trufflehog_short.json \
+      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+      #
+      #     curl -k -H "Content-Type: application/json" \
+      #          -u "${{ secrets.LOKI_AUTH }}" \
+      #          -X POST ${{ secrets.LOKI_URL }} \
+      #          -d @loki_payload.json
