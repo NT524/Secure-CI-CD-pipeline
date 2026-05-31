@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read
+      contents: read  
     env:
       target: ${{ inputs.target }}
 
@@ -58,7 +58,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           target: ${{ env.target }}
           rules_file_name: ".zap/rules.tsv"
-          issue_title: "🚨 DAST Alert: Vulnerabilities found in Juice Shop"
+          issue_title: "🚨 DAST Alert: Vulnerabilities found in application"
           fail_action: false
           cmd_options: >-
             -a -j
@@ -74,20 +74,56 @@ jobs:
             report_html.html
             report_json.json
 
+      - name: Evaluate Vulnerabilities & Block Promotion on High/Critical
+        id: evaluate_dast
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ ! -f "report_json.json" ]; then
+            echo "❌ Report file report_json.json not found!"
+            exit 1
+          fi
+
+          # Filter alerts with riskcode == "3" (High Risk in ZAP)
+          HIGH_ALERTS=$(jq '[.site[].alerts[]? | select(.riskcode == "3")]' report_json.json)
+          COUNT=$(echo "$HIGH_ALERTS" | jq 'length')
+
+          if [ "$COUNT" -gt 0 ]; then
+            echo "🚨 Detected $COUNT High/Critical vulnerabilities. Creating an issue and blocking promotion!"
+            
+            # Initialize Issue Body
+            ISSUE_BODY="## 🚨 DAST Scan Blocked Promotion\n\n**Scan Target:** ${{ env.target }}\nDetected **$COUNT** severe vulnerabilities (High/Critical) from OWASP ZAP.\n\n### Quick Details (Top 5):\n"
+            
+            # Extract top 5 vulnerabilities to provide context without overloading the payload
+            DETAILS=$(echo "$HIGH_ALERTS" | jq -r '.[0:5] | map("- **\(.alert)**\n  - *Risk/CWE*: \(.riskdesc) / CWE-\(.cweid)\n  - *Path*: `\(.instances[0].uri)`") | join("\n\n")')
+            
+            ISSUE_BODY="$ISSUE_BODY$DETAILS\n\n---\n*Please download the \`zap-scan-report\` artifact from the GitHub Actions run to view the full HTML/JSON reports.*"
+            
+            # Create GitHub Issue using GitHub CLI
+            gh issue create \
+              --title "🚨 DAST Block: Severe vulnerabilities detected on ${{ env.target }}" \
+              --body "$ISSUE_BODY" \
+              --label "security,dast"
+            
+            # MANDATORY: Exit 1 to mark the workflow as Failed, blocking deployment/promotion
+            exit 1
+          else
+            echo "✅ No High/Critical vulnerabilities detected. Proceeding with promotion."
+          fi
+
       - name: Push ZAP Scan Report to Grafana Loki
         if: always()
         run: |
           TIMESTAMP=$(date +%s%N)
 
-          # SỬA LỖI: Đọc đúng file report_json.json của ZAP thay vì Trivy
+          # Extract concise alert information to send to Loki
           if [ -f "report_json.json" ]; then
-            # Trích xuất gọn các thông tin Alert từ ZAP để đẩy lên Loki
             jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid, wascid}]' report_json.json > zap_short.json
           else
             echo '[]' > zap_short.json
           fi
 
-          # Tạo payload chuẩn gửi lên Loki
+          # Create standardized payload for Loki
           jq -n \
             --arg ts "$TIMESTAMP" \
             --arg job "github-actions" \
@@ -97,7 +133,7 @@ jobs:
             --slurpfile log zap_short.json \
             '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
 
-          # Gửi lên Loki
+          # Send payload to Loki
           curl -k -H "Content-Type: application/json" \
               -u "${{ secrets.LOKI_AUTH }}" \
               -X POST ${{ secrets.LOKI_URL }} \

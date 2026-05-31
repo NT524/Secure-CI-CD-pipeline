@@ -99,6 +99,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Run security scan on deployed application
+        id: trivy-scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}"
@@ -106,6 +107,7 @@ jobs:
           output: "trivy-report.sarif"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
+          exit-code: "1"
 
       - name: Upload Trivy JSON Report as Artifact
         uses: actions/upload-artifact@v4
@@ -120,28 +122,16 @@ jobs:
         if: always()
         with:
           sarif_file: trivy-report.sarif
-
-      # - name: Upload Trivy Security Reports
-      #   uses: actions/upload-artifact@v4
-      #   if: always()
-      #   with:
-      #     name: trivy-container-reports
-      #     path: |
-      #       trivy-report.json
-      #       trivy-report.html
-      #       trivy-report.sarif
-
-      
-
+        
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
       - name: Push Docker Image
+        if: steps.trivy-scan.outcome == 'success'
         run: |
           docker push ${{ env.IMAGE_NAME }}
 
       - name: Generate SBOM with Syft
-        # install syft and using Syft to generate SBOM
         run: |
           curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
           syft ${{ env.IMAGE_NAME }} -o spdx-json > sbom.spdx.json

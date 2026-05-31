@@ -4,18 +4,15 @@ name: DevSecOps Integrated Pipeline
 on:
   push:
     branches:
-      - staging
-      - prod
-    paths-ignore:
-      - 'VERSION'
-      - 'README.md'
+      - feature/*
+      - bugfix/*
+      - dev
+
   pull_request:
     branches:
       - staging
       - prod
-    paths-ignore:
-      - 'VERSION'
-      - 'README.md'
+
   workflow_dispatch:
     
 permissions:
@@ -50,49 +47,53 @@ jobs:
                 echo "ENVIRONMENT=$ENV_NAME" >> "$GITHUB_OUTPUT"
                 echo "✅ Đã xác định được môi trường thực thi: $ENV_NAME"
     #===================================CI=================================== 
-  # # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
-  # Scan:
-  #   uses: ./.github/workflows/scan.yml
+  # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
+    Scan:
+      uses: ./.github/workflows/scan.yml
 
-    # # Gọi file Build chạy sau khi Scan xong
-    # Build:
-    #     # needs: [Scan, Get-ENVIRONMENT]
-    #     # if: always()
-    #     uses: ./.github/workflows/build.yml
-    #     secrets: inherit # Kế thừa các secret từ repo
+
+      # Gọi file Build chạy sau khi Scan xong
+    Build:
+        needs: [Scan, Get-ENVIRONMENT]
+        if: (github.event_name == 'pull' || github.event_name == 'workflow_dispatch') 
+          && (needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'staging' || needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'prod')
+        uses: ./.github/workflows/build.yml
+        secrets: inherit # Kế thừa các secret từ repo
       
     #===================================CD===================================
+    Provision:
+        uses: ./.github/workflows/provision.yml
+        needs: Get-ENVIRONMENT
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') 
+          && (needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'staging' || needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'prod')
+        with:
+            ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
+        secrets: inherit
 
-    # Provision:
-    #     uses: ./.github/workflows/provision.yml
-    #     needs: Get-ENVIRONMENT
-    #     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    #     with:
-    #         ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
-    #         AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
-    #     secrets: inherit
     # Gọi file Deploy chạy cuối cùng, truyền output image_name từ file Build sang
-    # Deploy:
-    #     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    #     # needs: [Provision, Build, Get-ENVIRONMENT]
-    #     needs: Get-ENVIRONMENT
-    #     uses: ./.github/workflows/deploy.yml
-    #     with:
-    #         full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
-    #         CLUSTER_NAME: juice-shop-cluster-staging
-    #         K8S_NAMESPACE: app-namespace-staging
-    #         ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
-    #         AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
-    #         # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
-    #         # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
-    #         # full_image_name: ${{needs.Build.outputs.full_image_name}}
+    Deploy:
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') 
+          && (needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'staging' || needs.Get-ENVIRONMENT.outputs.ENVIRONMENT == 'prod')
+        # needs: [Provision, Build, Get-ENVIRONMENT]
+        needs: [Get-ENVIRONMENT, Build, Scan]
+        uses: ./.github/workflows/deploy.yml
+        with:
+            full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
+            CLUSTER_NAME: juice-shop-cluster-staging
+            K8S_NAMESPACE: app-namespace-staging
+            ENVIRONMENT: ${{ needs.Get-ENVIRONMENT.outputs.ENVIRONMENT }}
+            AWS_REGION: ${{ needs.Get-ENVIRONMENT.outputs.AWS_REGION }}
+            # CLUSTER_NAME: ${{needs.Provision.outputs.CLUSTER_NAME}}
+            # K8S_NAMESPACE: ${{needs.Provision.outputs.K8S_NAMESPACE}}
+            # full_image_name: ${{needs.Build.outputs.full_image_name}}
 
-    #     secrets: inherit
+        secrets: inherit
 
     Dast-scan:
       # needs: Deploy
         needs: Get-ENVIRONMENT
         uses: ./.github/workflows/zap.yml
         with:
-            target: https://preview.owasp-juice.shop
+            target: http://a465575b2b1eb432a831f4fb6439e9d9-1979129099.us-east-1.elb.amazonaws.com
         secrets: inherit
