@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - prod
+      - staging
 
   workflow_dispatch:
 
@@ -22,7 +23,7 @@ permissions:
   issues: write
 jobs:
   #===================================CI===================================
-  # Gọi file Scan chạy đầu tiên (Đã đổi tên cho đẹp)
+
   Scan-App:
     uses: ./.github/workflows/scan.yml
 
@@ -54,11 +55,12 @@ jobs:
     secrets: inherit
 
   Provision-prod:
-    # needs: Scan-IaC
+    needs: Scan-IaC
     uses: ./.github/workflows/provision.yml
     if:
       (github.event_name == 'pull' || github.event_name == 'workflow_dispatch')
-    #   && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
+      && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
+      && (github.ref == 'refs/heads/prod')
     with:
       ENVIRONMENT: prod
       AWS_REGION: us-east-1
@@ -75,15 +77,9 @@ jobs:
     secrets: inherit
 
   Deploy-staging:
-    if:
-      (github.event_name == 'pull' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
     needs: [Provision-staging, Build]
     uses: ./.github/workflows/deploy.yml
     with:
-      # full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
-      # CLUSTER_NAME: juice-shop-cluster-staging
-      # K8S_NAMESPACE: app-namespace-staging
       ENVIRONMENT: staging
       AWS_REGION: us-east-1
       CLUSTER_NAME: ${{needs.Provision-staging.outputs.CLUSTER_NAME}}
@@ -99,15 +95,9 @@ jobs:
     secrets: inherit
 
   Deploy-prod:
-    if:
-      (github.event_name == 'pull' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
     needs: [Provision-prod, Build]
     uses: ./.github/workflows/deploy.yml
     with:
-      # full_image_name: 451620995044.dkr.ecr.us-east-1.amazonaws.com/nt524:juice-shop-b5bf36742a97d5ecd8e184c523eb56ef847179fc-staging
-      # CLUSTER_NAME: juice-shop-cluster-staging
-      # K8S_NAMESPACE: app-namespace-staging
       ENVIRONMENT: prod
       AWS_REGION: us-east-1
       CLUSTER_NAME: ${{needs.Provision-prod.outputs.CLUSTER_NAME}}
