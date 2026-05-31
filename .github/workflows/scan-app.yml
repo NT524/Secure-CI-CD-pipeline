@@ -26,42 +26,28 @@ jobs:
           path: |
             trufflehog-report.json
 
-      - name: Push TruffleHog Report to Grafana Loki
+      - name: Push TruffleHog Metrics to Prometheus Pushgateway
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
 
           if [ -s "trufflehog-report.json" ]; then
-            echo "Phát hiện có mã bí mật lộ lọt! Đang gửi lên Loki..."
-            
-            # Sử dụng jq gom các dòng kết quả thành 1 chuỗi JSON rút gọn thông tin
-            jq '[inputs | {detector_name, decoder_name, verified, file: .source_metadata.Filesystem.file}]' trufflehog-report.json > trufflehog_short.json
-            
-            jq -n \
-              --arg ts "$TIMESTAMP" \
-              --arg job "github-actions" \
-              --arg scan_type "secret-scan" \
-              --arg repo "$REPO" \
-              --arg branch "$BRANCH" \
-              --arg status "FAILED" \
-              --slurpfile log trufflehog_short.json \
-              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+            echo "Phát hiện có mã bí mật lộ lọt!"
+            NUM_SECRETS=$(jq 'length' trufflehog-report.json)
+            STATUS="FAILED"
           else
-            echo "Mã nguồn sạch sẽ. Gửi trạng thái SUCCESS lên Loki..."
-            
-            jq -n \
-              --arg ts "$TIMESTAMP" \
-              --arg job "github-actions" \
-              --arg scan_type "secret-scan" \
-              --arg repo "$REPO" \
-              --arg branch "$BRANCH" \
-              --arg status "SUCCESS" \
-              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, "{\"message\": \"No secrets found.\"}"]]}]}' > loki_payload.json
+            echo "Mã nguồn sạch sẽ."
+            NUM_SECRETS=0
+            STATUS="SUCCESS"
           fi
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          # Định dạng dữ liệu theo chuẩn Prometheus Metrics
+          cat <<EOF > metrics.txt
+          # HELP devsecops_secrets_found_total Number of exposed secrets found by TruffleHog
+          # TYPE devsecops_secrets_found_total gauge
+          devsecops_secrets_found_total{repo="$REPO", branch="$BRANCH", scan_type="secret-scan", status="$STATUS"} $NUM_SECRETS
+          EOF
+
+          # Đẩy dữ liệu lên Prometheus Pushgateway
+          curl -k -X POST --data-binary @metrics.txt ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }} -u "${{ secrets.PROMETHEUS_AUTH }}"

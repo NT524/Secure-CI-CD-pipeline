@@ -135,38 +135,29 @@ jobs:
           path: sbom.spdx.json
           retention-days: 7
       
-      - name: Push Cleaned Trivy Report to Grafana Loki
+      - name: Push Trivy Metrics to Prometheus Pushgateway
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
-          IMAGE="${{ env.IMAGE_NAME }}"
-          
-          if [ -f "trivy-report.json" ] && [ "$(jq '.Results' trivy-report.json)" != "null" ]; then
-            # Trích xuất thông tin thiết yếu từ mảng lỗ hổng
-            jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-report.json > trivy_short.json
-            NUM_VULNS=$(jq 'length' trivy_short.json)
+          IMAGE="${{ env.ECR_REPOSITORY }}/${{ env.APP_NAME }}:${{ github.sha }}"
+
+          if [ -f "trivy-report.json" ]; then
+            # Đếm số lượng lỗ hổng
+            NUM_VULNS=$(jq '.Results[].Vulnerabilities | length' trivy-report.json || echo 0)
             STATUS=$([ $NUM_VULNS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
-            echo "[]" > trivy_short.json
+            NUM_VULNS=0
             STATUS="SUCCESS"
           fi
           
-          # Đóng gói payload gửi lên Loki
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "container-scan" \
-            --arg image "$IMAGE" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log trivy_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $image, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          # Đóng gói theo chuẩn Prometheus
+          cat <<EOF > metrics.txt
+          # HELP devsecops_image_vulnerabilities_total Total vulnerabilities found in container image
+          # TYPE devsecops_image_vulnerabilities_total gauge
+          devsecops_image_vulnerabilities_total{repo="$REPO", image="$IMAGE", scan_type="container-scan", status="$STATUS"} $NUM_VULNS
+          EOF
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          curl -k -X POST --data-binary @metrics.txt ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }} -u "${{ secrets.PROMETHEUS_AUTH }}"
 
       - name: Sign the published Docker image
         env:
