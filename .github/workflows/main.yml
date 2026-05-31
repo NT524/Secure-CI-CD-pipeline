@@ -26,15 +26,15 @@ permissions:
 jobs:
   #===================================CI===================================
 
-  # Scan-Application:
-  #   name: "Secret Scanning"
-  #   uses: ./.github/workflows/scan-app.yml
-  #   secrets: inherit # Truyền toàn bộ secrets xuống repo con (Loki Auth,...)
+  Scan-Application:
+    name: "Secret Scanning"
+    uses: ./.github/workflows/scan-app.yml
+    secrets: inherit # Truyền toàn bộ secrets xuống repo con (Loki Auth,...)
 
-  # Scan-Infrastructure:
-  #   name: "Checkov & Conftest IaC Scan"
-  #   uses: ./.github/workflows/scan-iac.yml
-  #   secrets: inherit
+  Scan-Infrastructure:
+    name: "Checkov & Conftest IaC Scan"
+    uses: ./.github/workflows/scan-iac.yml
+    secrets: inherit
 
   Build:
     # needs: [Scan-Application]
