@@ -26,28 +26,26 @@ jobs:
           path: |
             trufflehog-report.json
 
-      - name: Push TruffleHog Metrics to Prometheus Pushgateway
+      - name: Push TruffleHog Metrics to Grafana Prometheus
         if: always()
         run: |
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
 
           if [ -s "trufflehog-report.json" ]; then
-            echo "Phát hiện có mã bí mật lộ lọt!"
-            NUM_SECRETS=$(jq 'length' trufflehog-report.json)
-            STATUS="FAILED"
+            # Đếm số lượng lỗ hổng/secrets tìm thấy từ file json (mỗi object là 1 secret)
+            NUM_SECRETS=$(jq -s 'length' trufflehog-report.json)
           else
-            echo "Mã nguồn sạch sẽ."
             NUM_SECRETS=0
-            STATUS="SUCCESS"
           fi
 
-          # Định dạng dữ liệu theo chuẩn Prometheus Metrics
-          cat <<EOF > metrics.txt
-          # HELP devsecops_secrets_found_total Number of exposed secrets found by TruffleHog
-          # TYPE devsecops_secrets_found_total gauge
-          devsecops_secrets_found_total{repo="$REPO", branch="$BRANCH", scan_type="secret-scan", status="$STATUS"} $NUM_SECRETS
-          EOF
+          # Định dạng Influx Line Protocol (Lưu ý: Không được cách dấu phẩy ở phần nhãn)
+          PAYLOAD="security_scan,repo=${REPO},branch=${BRANCH},scan_type=secret-scan secrets_count=${NUM_SECRETS}"
 
-          # Đẩy dữ liệu lên Prometheus Pushgateway
-          curl -k -X POST --data-binary @metrics.txt ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }} -u "${{ secrets.PROMETHEUS_AUTH }}"
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"

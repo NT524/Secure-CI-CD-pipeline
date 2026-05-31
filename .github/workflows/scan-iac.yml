@@ -51,7 +51,7 @@ jobs:
         with:
           sarif_file: checkov-report/results_sarif.sarif
 
-      - name: Push Checkov Metrics to Prometheus Pushgateway
+      - name: Push Checkov Metrics to Grafana Cloud Prometheus
         if: always()
         run: |
           REPO="${{ github.repository }}"
@@ -65,19 +65,18 @@ jobs:
             STATUS="UNKNOWN"
           fi
 
-          # 1. Khai báo Metric dạng Gauge cho Prometheus
-          cat <<EOF > checkov_metrics.txt
-          # HELP devsecops_checkov_failed_checks_total Number of failed infrastructure checks found by Checkov
-          # TYPE devsecops_checkov_failed_checks_total gauge
-          devsecops_checkov_failed_checks_total{repo="$REPO", scan_type="iac-scan", status="$STATUS"} $FAILED_COUNT
-          EOF
+          # Chuẩn bị payload theo chuẩn Influx Line Protocol đồng bộ với hệ thống
+          # Metric tạo ra trong Prometheus sẽ là: security_scan_checkov_failed_count
+          PAYLOAD="security_scan,repo=${REPO},scan_type=iac-checkov,status=${STATUS} checkov_failed_count=${FAILED_COUNT}"
 
-          # 2. Xác thực qua tài khoản/API Key và đẩy dữ liệu mạng
-          curl -k -X POST \
-               -u "${{ secrets.PROMETHEUS_AUTH }}" \
-               --data-binary @checkov_metrics.txt \
-               ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }}
+          echo "Đang đẩy metric Checkov lên Grafana Prometheus: $PAYLOAD"
 
+          # Gửi qua endpoint tương thích của Grafana Cloud (Sử dụng lại cặp Secret đã tạo)
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"
   conftest-scan:
     name: Conftest (Policy Scan)
     needs: terraform-check
@@ -112,29 +111,23 @@ jobs:
             conftest-report.txt
             conftest-report.json
 
-      - name: Push Conftest Metrics to Prometheus Pushgateway
+      - name: Push IaC Scan Metrics to Grafana Prometheus
         if: always()
         run: |
           REPO="${{ github.repository }}"
-          
+
           if [ -f "conftest-report.json" ]; then
-            # Đếm tổng số lỗi quy tắc (failures) từ file report
-            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json || echo 0)
-            STATUS=$([ "$TOTAL_FAILURES" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json)
           else
             TOTAL_FAILURES=0
-            STATUS="UNKNOWN"
           fi
 
-          # 1. Định dạng dữ liệu chuẩn Prometheus (Gắn API key/Labels định danh)
-          cat <<EOF > conftest_metrics.txt
-          # HELP devsecops_conftest_failures_total Number of policy failures found by Conftest
-          # TYPE devsecops_conftest_failures_total gauge
-          devsecops_conftest_failures_total{repo="$REPO", scan_type="conftest-policy-scan", status="$STATUS"} $TOTAL_FAILURES
-          EOF
+          PAYLOAD="security_scan,repo=${REPO},scan_type=iac-scan iac_failures_count=${TOTAL_FAILURES}"
 
-          # 2. Sử dụng Basic Auth truyền API Key bảo mật để đẩy lên Pushgateway
-          curl -k -X POST \
-               -u "${{ secrets.PROMETHEUS_AUTH }}" \
-               --data-binary @conftest_metrics.txt \
-               ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }}
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"
