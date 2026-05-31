@@ -70,6 +70,8 @@ jobs:
       ENVIRONMENT: prod
       AWS_REGION: us-east-1
       CLUSTER_NAME: ${{needs.Provision-prod.outputs.CLUSTER_NAME}}
+      K8S_NAMESPACE: ${{needs.Provision-prod.outputs.K8S_NAMESPACE}}
+    secrets: inherit
 
   # Deploy-staging:
   #   if:

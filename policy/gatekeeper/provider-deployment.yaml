@@ -43,11 +43,13 @@ spec:
         - name: cosign-key
           mountPath: /keys
           readOnly: true
+        - name: registry-auth
+          mountPath: /root/.docker
+          readOnly: true
       volumes:
       - name: cosign-key
         secret:
           secretName: cosign-public-key
-      # 🛠️ ĐÃ SỬA: Ánh xạ chuẩn từ định dạng K8s (.dockerconfigjson) sang file config.json truyền thống
       - name: registry-auth
         secret:
           secretName: ecr-registry-auth
