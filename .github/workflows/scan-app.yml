@@ -1,0 +1,67 @@
+name: Application Security Scanning
+
+on:
+  workflow_call:
+    
+
+jobs:
+  secret-scan:
+    name: TruffleHog (Secret Scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog Scan (JSON Output)
+        run: |
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json || true
+
+      - name: Upload TruffleHog Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trufflehog-secret-reports
+          path: |
+            trufflehog-report.json
+
+      - name: Push TruffleHog Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+
+          if [ -s "trufflehog-report.json" ]; then
+            echo "Phát hiện có mã bí mật lộ lọt! Đang gửi lên Loki..."
+            
+            # Sử dụng jq gom các dòng kết quả thành 1 chuỗi JSON rút gọn thông tin
+            jq '[inputs | {detector_name, decoder_name, verified, file: .source_metadata.Filesystem.file}]' trufflehog-report.json > trufflehog_short.json
+            
+            jq -n \
+              --arg ts "$TIMESTAMP" \
+              --arg job "github-actions" \
+              --arg scan_type "secret-scan" \
+              --arg repo "$REPO" \
+              --arg branch "$BRANCH" \
+              --arg status "FAILED" \
+              --slurpfile log trufflehog_short.json \
+              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          else
+            echo "Mã nguồn sạch sẽ. Gửi trạng thái SUCCESS lên Loki..."
+            
+            jq -n \
+              --arg ts "$TIMESTAMP" \
+              --arg job "github-actions" \
+              --arg scan_type "secret-scan" \
+              --arg repo "$REPO" \
+              --arg branch "$BRANCH" \
+              --arg status "SUCCESS" \
+              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, "{\"message\": \"No secrets found.\"}"]]}]}' > loki_payload.json
+          fi
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json

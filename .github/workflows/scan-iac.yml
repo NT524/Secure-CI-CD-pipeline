@@ -1,0 +1,156 @@
+name: Infrastructure Security Scanning
+
+on:
+  workflow_call:
+
+jobs:
+  terraform-check:
+    name: Terraform Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # - name: Terraform Init & Validate
+      #   run: |
+      #     cd terraform
+      #     terraform init -backend=false -input=false -upgrade
+      #     terraform validate
+
+  iac-scan:
+    name: Checkov (IaC Security)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Run Checkov Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          skip_check: CKV2_AWS_11,CKV2_AWS_12,CKV_AWS_39,CKV_AWS_38
+          skip_path: policy/,.github/workflows/
+          output_format: json,sarif
+          output_file_path: checkov-report
+          soft_fail: false
+
+      - name: Upload Checkov Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-iac-reports
+          path: checkov-report*
+
+      - name: Upload Checkov SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: checkov-report/results_sarif.sarif
+
+      - name: Push Checkov Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          
+          if [ -f "checkov-report/checkov-report.json" ]; then
+            # Lấy thông tin tổng quan số lỗi pass/failed và danh sách các policy bị vi phạm
+            jq '{summary: .summary, failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, file_line_range}]}' checkov-report/checkov-report.json > checkov_short.json
+            FAILED_COUNT=$(jq '.summary.failed' checkov_short.json)
+            STATUS=$([ $FAILED_COUNT -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+          else
+            echo "{\"message\": \"No Checkov report found\"}" > checkov_short.json
+            STATUS="UNKNOWN"
+          fi
+
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "iac-scan" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
+            --slurpfile log checkov_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json
+
+  conftest-scan:
+    name: Conftest (Policy Scan)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Install Conftest
+        run: |
+          CONFTST_VERSION=0.59.0
+          wget -qO- "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTST_VERSION}/conftest_${CONFTST_VERSION}_Linux_x86_64.tar.gz" | tar xz
+          sudo mv conftest /usr/local/bin/conftest
+
+      - name: Run Conftest Static Policy Scan
+        continue-on-error: true
+        run: |
+          set +e
+          conftest test terraform/*.tf k8s/*.yaml --policy policy/conftest > conftest-report.txt
+          CONFTST_EXIT_CODE=$?
+          conftest test terraform/*.tf k8s/*.yaml --policy policy/conftest --output json > conftest-report.json
+          set -e
+          echo "Conftest completed with exit code: $CONFTST_EXIT_CODE"
+          exit 0
+
+      - name: Upload Conftest Policy Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: conftest-policy-reports
+          path: |
+            conftest-report.txt
+            conftest-report.json
+
+      - name: Push Conftest Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          
+          if [ -f "conftest-report.json" ]; then
+            # 1. Rút gọn payload JSON để tiết kiệm dung lượng lưu trữ cho Loki
+            # Chỉ giữ lại tên file, số lượng test thành công và chi tiết tin nhắn lỗi (msg)
+            jq '[.[]? | {filename, namespace, successes, failures: [.failures[]? | {msg}]}]' conftest-report.json > conftest_short.json
+            
+            # 2. Đếm tổng số lỗi quy tắc (failures) trên tất cả các file được quét
+            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json)
+            
+            if [ "$TOTAL_FAILURES" -gt 0 ]; then
+              STATUS="FAILED"
+            else
+              STATUS="SUCCESS"
+            fi
+          else
+            echo "[]" > conftest_short.json
+            STATUS="UNKNOWN"
+          fi
+
+          # 3. Đóng gói payload có cấu trúc nhãn tĩnh (stream labels) đồng bộ hệ thống
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "conftest-policy-scan" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
+            --slurpfile log conftest_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          # 4. Thực hiện POST đẩy dữ liệu sang Grafana Loki
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json

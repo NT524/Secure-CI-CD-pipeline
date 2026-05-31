@@ -1,0 +1,33 @@
+name: Pre-commit Security Gate
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+      - dev
+      - staging
+      - prod
+
+jobs:
+  pre-commit-compliance:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # Bước 1: Lấy mã nguồn mới nhất về Runner cloud
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Cần thiết để Gitleaks có thể quét toàn bộ lịch sử commit (commit history)
+
+    # Bước 2: Khởi tạo môi trường Python (vì framework pre-commit chạy trên nền Python)
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # Bước 3: Sử dụng Official Action để chạy pre-commit
+    - name: Run pre-commit hooks
+      uses: pre-commit/action@v3.0.1
+
+    

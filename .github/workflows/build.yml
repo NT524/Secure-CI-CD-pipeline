@@ -139,21 +139,30 @@ jobs:
         if: always()
         run: |
           TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          IMAGE="${{ env.IMAGE_NAME }}"
           
-          # Lọc file JSON, chỉ giữ lại thông tin cơ bản của từng lỗ hổng tìm thấy để giảm dung lượng file xuống 90%
-          jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-report.json > trivy_short.json
+          if [ -f "trivy-report.json" ] && [ "$(jq '.Results' trivy-report.json)" != "null" ]; then
+            # Trích xuất thông tin thiết yếu từ mảng lỗ hổng
+            jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-report.json > trivy_short.json
+            NUM_VULNS=$(jq 'length' trivy_short.json)
+            STATUS=$([ $NUM_VULNS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+          else
+            echo "[]" > trivy_short.json
+            STATUS="SUCCESS"
+          fi
           
-          # Tạo cấu trúc payload cho Loki
+          # Đóng gói payload gửi lên Loki
           jq -n \
             --arg ts "$TIMESTAMP" \
             --arg job "github-actions" \
-            --arg scan_type "trivy-container-scan" \
-            --arg img "${{ env.IMAGE_NAME }}" \
-            --arg repo "${{ github.repository }}" \
+            --arg scan_type "container-scan" \
+            --arg image "$IMAGE" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
             --slurpfile log trivy_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $img, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $image, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
 
-          # Gửi file đã được rút gọn lên Loki
           curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
                -X POST ${{ secrets.LOKI_URL }} \
