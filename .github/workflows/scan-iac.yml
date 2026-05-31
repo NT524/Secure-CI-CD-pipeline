@@ -56,29 +56,29 @@ jobs:
         with:
           sarif_file: checkov-report/results_sarif.sarif
 
-      - name: 5. Push Checkov Report to Grafana Loki
-        if: always()
-        run: |
-          TIMESTAMP=$(date +%s%N)
-
-          if [ -f "checkov-report/results_json.json" ]; then
-            jq '{failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, resource, severity}], passed_count: (.summary.passed // 0), failed_count: (.summary.failed // 0)}' checkov-report/results_json.json > checkov_short.json
-          else
-            echo '{"failed_checks":[],"passed_count":0,"failed_count":0}' > checkov_short.json
-          fi
-
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "checkov-iac-scan" \
-            --arg repo "${{ github.repository }}" \
-            --slurpfile log checkov_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+      # - name: 5. Push Checkov Report to Grafana Loki
+      #   if: always()
+      #   run: |
+      #     TIMESTAMP=$(date +%s%N)
+      #
+      #     if [ -f "checkov-report/results_json.json" ]; then
+      #       jq '{failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, resource, severity}], passed_count: (.summary.passed // 0), failed_count: (.summary.failed // 0)}' checkov-report/results_json.json > checkov_short.json
+      #     else
+      #       echo '{"failed_checks":[],"passed_count":0,"failed_count":0}' > checkov_short.json
+      #     fi
+      #
+      #     jq -n \
+      #       --arg ts "$TIMESTAMP" \
+      #       --arg job "github-actions" \
+      #       --arg scan_type "checkov-iac-scan" \
+      #       --arg repo "${{ github.repository }}" \
+      #       --slurpfile log checkov_short.json \
+      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+      #
+      #     curl -k -H "Content-Type: application/json" \
+      #          -u "${{ secrets.LOKI_AUTH }}" \
+      #          -X POST ${{ secrets.LOKI_URL }} \
+      #          -d @loki_payload.json
 
       # --- QUÉT CHÍNH SÁCH BẰNG CONFTEST ---
       - name: 6. Install Conftest
@@ -105,26 +105,26 @@ jobs:
             conftest-report.txt
             conftest-report.json
 
-      - name: 9. Push Conftest Report to Grafana Loki
-        if: always()
-        run: |
-          TIMESTAMP=$(date +%s%N)
-
-          if [ -f "conftest-report.json" ]; then
-            jq '[.[]? | {filename, namespace, successes, failures}]' conftest-report.json > conftest_short.json
-          else
-            echo '[]' > conftest_short.json
-          fi
-
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "conftest-policy-scan" \
-            --arg repo "${{ github.repository }}" \
-            --slurpfile log conftest_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+      # - name: 9. Push Conftest Report to Grafana Loki
+      #   if: always()
+      #   run: |
+      #     TIMESTAMP=$(date +%s%N)
+      #
+      #     if [ -f "conftest-report.json" ]; then
+      #       jq '[.[]? | {filename, namespace, successes, failures}]' conftest-report.json > conftest_short.json
+      #     else
+      #       echo '[]' > conftest_short.json
+      #     fi
+      #
+      #     jq -n \
+      #       --arg ts "$TIMESTAMP" \
+      #       --arg job "github-actions" \
+      #       --arg scan_type "conftest-policy-scan" \
+      #       --arg repo "${{ github.repository }}" \
+      #       --slurpfile log conftest_short.json \
+      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+      #
+      #     curl -k -H "Content-Type: application/json" \
+      #          -u "${{ secrets.LOKI_AUTH }}" \
+      #          -X POST ${{ secrets.LOKI_URL }} \
+      #          -d @loki_payload.json
