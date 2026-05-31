@@ -88,15 +88,21 @@
           run: |
             kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.13/deploy/gatekeeper.yaml
             
-            # Updated paths: Moved from 'pod-security-policy' to 'general'
-            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/privileged/template.yaml
-            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/readonlyrootfilesystem/template.yaml
-            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/general/capabilities/template.yaml
+            # Đợi một chút để K8s đăng ký xong các CRD của Gatekeeper
+            sleep 10
+            
+            # Sử dụng đúng đường dẫn gốc trong thư mục pod-security-policy của OPA Gatekeeper Library
+            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/pod-security-policy/privileged-containers/template.yaml
+            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/pod-security-policy/read-only-root-filesystem/template.yaml
+            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper-library/master/library/pod-security-policy/capabilities/template.yaml
             
             sleep 10
 
+            # Bật tính năng External Data cho Gatekeeper
             kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
             kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+            
+            # Chờ quá trình restart pod hoàn tất
             kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
             kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
 
