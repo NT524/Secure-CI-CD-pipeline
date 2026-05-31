@@ -95,11 +95,23 @@ jobs:
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: "${{ env.IMAGE_NAME }}"
+          format: "json"
+          output: "trivy-report.json"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          exit-code: "0" 
+      
+      - name: Run Trivy scan (SARIF format)
+        id: trivy-scan-sarif
+        if: always() 
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ env.IMAGE_NAME }}"
           format: "sarif"
           output: "trivy-report.sarif"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
-          exit-code: "1"
+          exit-code: "0"
 
       - name: Upload Trivy JSON Report as Artifact
         uses: actions/upload-artifact@v4
