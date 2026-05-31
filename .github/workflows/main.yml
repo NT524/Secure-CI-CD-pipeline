@@ -25,12 +25,10 @@ jobs:
   #===================================CI===================================
 
   Scan-App:
-    uses: ./.github/workflows/scan.yml
+    uses: ./.github/workflows/scan-app.yml
 
   Scan-IaC:
-    uses: ./.github/workflows/scan.yml
-    # Tách scan ban đầu ra
-    # Gọi file Build chạy sau khi Scan xong
+    uses: ./.github/workflows/scan-iac.yml
 
   Build:
     needs: Scan-App
