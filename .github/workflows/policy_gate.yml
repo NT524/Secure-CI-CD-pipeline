@@ -152,5 +152,14 @@
             sed -i "s|{{ CLUSTER_NAME }}|${{ env.CLUSTER_NAME }}|g" policy/gatekeeper/provider-deployment.yaml
             sed -i "s|{{ K8S_NAMESPACE }}|${{ env.K8S_NAMESPACE }}|g" policy/gatekeeper/provider-deployment.yaml
 
+            # 1. Khởi tạo Template và Provider trước
+            kubectl apply -f policy/gatekeeper/constraint-template.yaml
+            kubectl apply -f policy/gatekeeper/provider.yaml
+            
+            # 2. Đợi Kubernetes đăng ký CRD "K8sRequiredImageSignatures"
+            echo "⏳ Đợi 15 giây để Gatekeeper khởi tạo CRD..."
+            sleep 15
+            
+            # 3. Apply kustomization cho các resource còn lại (bao gồm Constraint)
             kubectl apply -k policy/gatekeeper/
             kubectl get pods -n cosign-system
