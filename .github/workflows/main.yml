@@ -25,12 +25,10 @@ jobs:
   #===================================CI===================================
 
   Scan-App:
-    uses: ./.github/workflows/scan.yml
+    uses: ./.github/workflows/scan-app.yml
 
   Scan-IaC:
-    uses: ./.github/workflows/scan.yml
-    # Tách scan ban đầu ra
-    # Gọi file Build chạy sau khi Scan xong
+    uses: ./.github/workflows/scan-iac.yml
 
   Build:
     needs: Scan-App
@@ -47,8 +45,8 @@ jobs:
     uses: ./.github/workflows/provision.yml
     needs: Scan-IaC
     if:
-      (github.event_name == 'pull' || github.event_name == 'workflow_dispatch' )
-      && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
+      && (needs.Scan-IaC.outcome == 'success')
     with:
       ENVIRONMENT: staging
       AWS_REGION: us-east-1
@@ -58,9 +56,9 @@ jobs:
     needs: Scan-IaC
     uses: ./.github/workflows/provision.yml
     if:
-      (github.event_name == 'pull' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-IaC.outcome == 'success' || needs.Scan-IaC.outcome == 'neutral')
-      && (github.ref == 'refs/heads/prod')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      && (needs.Scan-IaC.outcome == 'success')
+      && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
     with:
       ENVIRONMENT: prod
       AWS_REGION: us-east-1
@@ -95,7 +93,7 @@ jobs:
     secrets: inherit
 
   Deploy-prod:
-    needs: [Provision-prod, Build]
+    needs: [Provision-prod, Build, Dast-scan]
     uses: ./.github/workflows/deploy.yml
     with:
       ENVIRONMENT: prod
