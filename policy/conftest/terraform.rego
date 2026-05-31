@@ -4,8 +4,8 @@ import rego.v1
 # 1. Luật cấm mở public endpoint cho EKS trong quét tĩnh Terraform
 deny contains msg if {
   is_terraform_input
-  some path, value in walk(input)
-  path[count(path) - 1] == "cluster_endpoint_public_access"
+  walk(input, [path, value])
+  path_ends_with(path, "cluster_endpoint_public_access")
   value == true
 
   msg := "CẢNH BÁO: EKS cluster không được bật public endpoint trong quét tĩnh CI."
@@ -14,8 +14,8 @@ deny contains msg if {
 # 2. Luật cấm dùng instance type quá lớn trong node group
 deny contains msg if {
   is_terraform_input
-  some path, value in walk(input)
-  path[count(path) - 1] == "instance_types"
+  walk(input, [path, value])
+  path_ends_with(path, "instance_types")
   instance_type := value[_]
   startswith(instance_type, "p")
 
@@ -48,13 +48,18 @@ is_terraform_input if {
 }
 
 has_provider_block if {
-  some path, value in walk(input)
-  path[count(path) - 1] == "provider"
+  walk(input, [path, value])
+  path_ends_with(path, "provider")
   is_object(value)
 }
 
 has_default_tags if {
-  some path, value in walk(input)
-  path[count(path) - 1] == "default_tags"
+  walk(input, [path, value])
+  path_ends_with(path, "default_tags")
   is_object(value)
+}
+
+path_ends_with(path, key) if {
+  count(path) > 0
+  path[count(path) - 1] == key
 }
