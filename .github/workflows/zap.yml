@@ -115,25 +115,29 @@ jobs:
         if: always()
         run: |
           TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          TARGET="${{ env.target }}"
 
-          # Extract concise alert information to send to Loki
           if [ -f "report_json.json" ]; then
-            jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid, wascid}]' report_json.json > zap_short.json
+            # Rút gọn danh sách các lỗ hổng tìm thấy qua quét động
+            jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid}]' report_json.json > zap_short.json
+            NUM_ALERTS=$(jq 'length' zap_short.json)
+            STATUS=$([ $NUM_ALERTS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
-            echo '[]' > zap_short.json
+            echo "[]" > zap_short.json
+            STATUS="SUCCESS"
           fi
 
-          # Create standardized payload for Loki
           jq -n \
             --arg ts "$TIMESTAMP" \
             --arg job "github-actions" \
-            --arg scan_type "zap-dast-scan" \
-            --arg target "${{ env.target }}" \
-            --arg repo "${{ github.repository }}" \
+            --arg scan_type "dast-scan" \
+            --arg target "$TARGET" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
             --slurpfile log zap_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
 
-          # Send payload to Loki
           curl -k -H "Content-Type: application/json" \
               -u "${{ secrets.LOKI_AUTH }}" \
               -X POST ${{ secrets.LOKI_URL }} \

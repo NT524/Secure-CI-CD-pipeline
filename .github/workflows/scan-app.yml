@@ -34,42 +34,33 @@ jobs:
           BRANCH="${{ github.ref_name }}"
 
           if [ -s "trufflehog-report.json" ]; then
-            echo "Phát hiện có mã bí mật lộ lọt! Đang parse và gửi lên Loki..."
+            echo "Phát hiện có mã bí mật lộ lọt! Đang gửi lên Loki..."
             
-            # Sử dụng jq --slurpfile để đọc toàn bộ các dòng log của TruffleHog
-            # LOẠI BỎ trường '.raw' để đảm bảo an toàn bảo mật cho hệ thống log
+            # Sử dụng jq gom các dòng kết quả thành 1 chuỗi JSON rút gọn thông tin
+            jq '[inputs | {detector_name, decoder_name, verified, file: .source_metadata.Filesystem.file}]' trufflehog-report.json > trufflehog_short.json
+            
             jq -n \
               --arg ts "$TIMESTAMP" \
               --arg job "github-actions" \
-              --arg scan_type "trufflehog-secret-scan" \
+              --arg scan_type "secret-scan" \
               --arg repo "$REPO" \
               --arg branch "$BRANCH" \
-              --slurpfile findings trufflehog-report.json \
-              '{
-                streams: [{
-                  stream: {job: $job, scan_type: $scan_type, repo: $repo, branch: $branch, status: "critical"},
-                  values: ($findings | map([$ts, ({detector_name: .detector_name, decoder_name: .decoder_name, verified: .verified, source_metadata: .source_metadata} | tostring)]))
-                }]
-              }' > loki_payload.json
+              --arg status "FAILED" \
+              --slurpfile log trufflehog_short.json \
+              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
           else
-            echo "Mã nguồn sạch sẽ. Gửi trạng thái Success lên Loki..."
+            echo "Mã nguồn sạch sẽ. Gửi trạng thái SUCCESS lên Loki..."
             
-            # Trường hợp không có lỗi, gửi 1 dòng log thông báo hệ thống an toàn
             jq -n \
               --arg ts "$TIMESTAMP" \
               --arg job "github-actions" \
-              --arg scan_type "trufflehog-secret-scan" \
+              --arg scan_type "secret-scan" \
               --arg repo "$REPO" \
               --arg branch "$BRANCH" \
-              '{
-                streams: [{
-                  stream: {job: $job, scan_type: $scan_type, repo: $repo, branch: $branch, status: "info"},
-                  values: [[$ts, "Chúc mừng! Không tìm thấy thông tin nhạy cảm nào bị lộ lọt (No secrets found)."]]
-                }]
-              }' > loki_payload.json
+              --arg status "SUCCESS" \
+              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, "{\"message\": \"No secrets found.\"}"]]}]}' > loki_payload.json
           fi
 
-          # Thực hiện POST payload lên Grafana Loki
           curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
                -X POST ${{ secrets.LOKI_URL }} \

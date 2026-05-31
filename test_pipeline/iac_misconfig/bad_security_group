@@ -1,0 +1,17 @@
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_security_group" "bad_sg" {
+  name        = "allow_all_ssh"
+  description = "Bẫy Checkov: Mo cong SSH cho toan the gioi"
+
+  ingress {
+    description = "SSH from anywhere"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    # Lỗi nghiêm trọng: CIDR 0.0.0.0/0 cho phép bất kỳ ai cũng có thể truy cập
+    cidr_blocks = ["0.0.0.0/0"] 
+  }
+}

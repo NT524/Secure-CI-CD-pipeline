@@ -1,0 +1,9 @@
+{
+  "name": "juice-shop-vulnerable-deps",
+  "version": "1.0.0",
+  "description": "Bẫy SCA cho đồ án",
+  "dependencies": {
+    "express": "4.15.0", 
+    "lodash": "4.17.11"  
+  }
+}
