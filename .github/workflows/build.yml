@@ -7,9 +7,6 @@ on:
         description: "The full tag of the built image"
         value: ${{ jobs.build-and-test.outputs.full_image_name }}
     inputs:
-      ENVIRONMENT:
-        required: true
-        type: string
       AWS_REGION:
         required: true
         type: string
@@ -19,12 +16,9 @@ env:
   AWS_REGION: ${{ inputs.AWS_REGION }}
   ECR_REPOSITORY: nt524
   APP_NAME: juice-shop
-  ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
 jobs:
   build-and-test:
     name: Build & Push Application
-    # needs: [semgrep-scan, python-scan, javascript-scan, iac-scan]
-    # if: always()
     runs-on: ubuntu-latest
     outputs:
       full_image_name: ${{ steps.prep.outputs.IMAGE_NAME }}
@@ -46,7 +40,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: app/NodeJS/juice-shop/package.json
 
-      - name: Nạp AWS Credentials
+      - name: AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -57,17 +51,14 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Prepare Image Name & Environment
+      - name: Prepare Image Name
         id: prep
         env: 
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          # SỬA LỖI TRỐNG BIẾN: Nếu env.ENVIRONMENT bị rỗng từ file Mẹ, tự động fallback về 'staging' để không gãy tag
-          ENVIRONMENT="${{ env.ENVIRONMENT }}"
-          echo "ENV=${ENVIRONMENT}" >> $GITHUB_OUTPUT
 
           VERSION_TAG="${{ github.sha }}"
-          IMAGE_NAME=${{env.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:${{ env.APP_NAME }}-${VERSION_TAG}-${ENVIRONMENT}
+          IMAGE_NAME=${{env.ECR_REGISTRY}}/${{ env.ECR_REPOSITORY }}:${{ env.APP_NAME }}-${VERSION_TAG}
 
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_OUTPUT
