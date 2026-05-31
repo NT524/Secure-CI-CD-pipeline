@@ -85,6 +85,7 @@
         # TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
         - name: Install Gatekeeper with external data enabled
           run: |
+            kubectl delete crd providers.externaldata.gatekeeper.sh --ignore-not-found=true
             kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
             kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
             kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
