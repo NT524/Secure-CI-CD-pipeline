@@ -44,4 +44,4 @@ spec:
   ports:
   - protocol: TCP
     port: 80 # Mở port 80 thẳng ra Internet
-    targetPort: 3000 # Port thực tế của container
+    targetPort: 5000 # Port thực tế của container
