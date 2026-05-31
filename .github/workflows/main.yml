@@ -38,8 +38,8 @@ jobs:
 
   Build:
     # needs: [Scan-Application]
-    if:
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    if: | 
+        (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
       # && (needs.Scan-Application.outcome == 'success' )
     with:
       AWS_REGION: us-east-1
@@ -50,8 +50,8 @@ jobs:
   Provision-staging:
     uses: ./.github/workflows/provision.yml
     # needs: Scan-Infrastructure
-    if:
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
+    if: |
+        (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
       # && (needs.Scan-IaC.outcome == 'success')
     with:
       ENVIRONMENT: staging
@@ -61,9 +61,9 @@ jobs:
   Provision-prod:
     # needs: Scan-Infrastructure
     uses: ./.github/workflows/provision.yml
-    if:
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
+    if: |
+        (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+        && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
       # && (needs.Scan-Infrastructure.outcome == 'success')
       
     with:
