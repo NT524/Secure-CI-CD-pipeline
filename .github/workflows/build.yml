@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
-          cache-dependency-path: app/NodeJS/juice-shop/package.json
+          cache-dependency-path: app/package.json
 
       - name: AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
