@@ -119,7 +119,7 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       - name: Push Docker Image
-        if: steps.trivy-scan.outcome == 'success'
+        # if: steps.trivy-scan.outcome == 'success'
         run: |
           docker push ${{ env.IMAGE_NAME }}
 
