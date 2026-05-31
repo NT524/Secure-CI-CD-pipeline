@@ -8,9 +8,9 @@ RUN apt-get update \
     && wget -O /usr/local/bin/cosign "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" \
     && chmod +x /usr/local/bin/cosign
 
-WORKDIR /app
-COPY app.py /app/app.py
+WORKDIR /verify
+COPY verify.py /verify/verify.py
 
 EXPOSE 8090
 
-CMD ["python3", "/app/app.py"]
+CMD ["python3", "/verify/verify.py"]
