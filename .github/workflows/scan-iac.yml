@@ -51,35 +51,32 @@ jobs:
         with:
           sarif_file: checkov-report/results_sarif.sarif
 
-      - name: Push Checkov Report to Grafana Loki
+      - name: Push Checkov Metrics to Prometheus Pushgateway
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           
           if [ -f "checkov-report/checkov-report.json" ]; then
-            # Lấy thông tin tổng quan số lỗi pass/failed và danh sách các policy bị vi phạm
-            jq '{summary: .summary, failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, file_line_range}]}' checkov-report/checkov-report.json > checkov_short.json
-            FAILED_COUNT=$(jq '.summary.failed' checkov_short.json)
-            STATUS=$([ $FAILED_COUNT -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+            # Trích xuất trực tiếp số lượng check bị fail từ summary
+            FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
+            STATUS=$([ "$FAILED_COUNT" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
-            echo "{\"message\": \"No Checkov report found\"}" > checkov_short.json
+            FAILED_COUNT=0
             STATUS="UNKNOWN"
           fi
 
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "iac-scan" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log checkov_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          # 1. Khai báo Metric dạng Gauge cho Prometheus
+          cat <<EOF > checkov_metrics.txt
+          # HELP devsecops_checkov_failed_checks_total Number of failed infrastructure checks found by Checkov
+          # TYPE devsecops_checkov_failed_checks_total gauge
+          devsecops_checkov_failed_checks_total{repo="$REPO", scan_type="iac-scan", status="$STATUS"} $FAILED_COUNT
+          EOF
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          # 2. Xác thực qua tài khoản/API Key và đẩy dữ liệu mạng
+          curl -k -X POST \
+               -u "${{ secrets.PROMETHEUS_AUTH }}" \
+               --data-binary @checkov_metrics.txt \
+               ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }}
 
   conftest-scan:
     name: Conftest (Policy Scan)
@@ -115,42 +112,29 @@ jobs:
             conftest-report.txt
             conftest-report.json
 
-      - name: Push Conftest Report to Grafana Loki
+      - name: Push Conftest Metrics to Prometheus Pushgateway
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           
           if [ -f "conftest-report.json" ]; then
-            # 1. Rút gọn payload JSON để tiết kiệm dung lượng lưu trữ cho Loki
-            # Chỉ giữ lại tên file, số lượng test thành công và chi tiết tin nhắn lỗi (msg)
-            jq '[.[]? | {filename, namespace, successes, failures: [.failures[]? | {msg}]}]' conftest-report.json > conftest_short.json
-            
-            # 2. Đếm tổng số lỗi quy tắc (failures) trên tất cả các file được quét
-            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json)
-            
-            if [ "$TOTAL_FAILURES" -gt 0 ]; then
-              STATUS="FAILED"
-            else
-              STATUS="SUCCESS"
-            fi
+            # Đếm tổng số lỗi quy tắc (failures) từ file report
+            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json || echo 0)
+            STATUS=$([ "$TOTAL_FAILURES" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
-            echo "[]" > conftest_short.json
+            TOTAL_FAILURES=0
             STATUS="UNKNOWN"
           fi
 
-          # 3. Đóng gói payload có cấu trúc nhãn tĩnh (stream labels) đồng bộ hệ thống
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "conftest-policy-scan" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log conftest_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          # 1. Định dạng dữ liệu chuẩn Prometheus (Gắn API key/Labels định danh)
+          cat <<EOF > conftest_metrics.txt
+          # HELP devsecops_conftest_failures_total Number of policy failures found by Conftest
+          # TYPE devsecops_conftest_failures_total gauge
+          devsecops_conftest_failures_total{repo="$REPO", scan_type="conftest-policy-scan", status="$STATUS"} $TOTAL_FAILURES
+          EOF
 
-          # 4. Thực hiện POST đẩy dữ liệu sang Grafana Loki
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          # 2. Sử dụng Basic Auth truyền API Key bảo mật để đẩy lên Pushgateway
+          curl -k -X POST \
+               -u "${{ secrets.PROMETHEUS_AUTH }}" \
+               --data-binary @conftest_metrics.txt \
+               ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }}

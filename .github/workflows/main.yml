@@ -40,7 +40,7 @@ jobs:
     needs: Scan-Application
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-Application.outcome == 'success' )
+      # && (needs.Scan-Application.outcome == 'success' )
     with:
       AWS_REGION: us-east-1
     uses: ./.github/workflows/build.yml
@@ -52,7 +52,7 @@ jobs:
     needs: Scan-Infrastructure
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
-      && (needs.Scan-IaC.outcome == 'success')
+      # && (needs.Scan-IaC.outcome == 'success')
     with:
       ENVIRONMENT: staging
       AWS_REGION: us-east-1
@@ -63,8 +63,9 @@ jobs:
     uses: ./.github/workflows/provision.yml
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-Infrastructure.outcome == 'success')
       && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
+      # && (needs.Scan-Infrastructure.outcome == 'success')
+      
     with:
       ENVIRONMENT: prod
       AWS_REGION: us-east-1

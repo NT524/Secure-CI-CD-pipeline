@@ -111,34 +111,30 @@ jobs:
             echo "✅ No High/Critical vulnerabilities detected. Proceeding with promotion."
           fi
 
-      - name: Push ZAP Scan Report to Grafana Loki
+      - name: Push ZAP Scan Metrics to Prometheus Pushgateway
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           TARGET="${{ env.target }}"
 
           if [ -f "report_json.json" ]; then
-            # Rút gọn danh sách các lỗ hổng tìm thấy qua quét động
-            jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid}]' report_json.json > zap_short.json
-            NUM_ALERTS=$(jq 'length' zap_short.json)
-            STATUS=$([ $NUM_ALERTS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+            # Đếm tổng số alert được tìm thấy trong mảng alerts
+            NUM_ALERTS=$(jq '[.site[].alerts[]?] | length' report_json.json || echo 0)
+            STATUS=$([ "$NUM_ALERTS" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
-            echo "[]" > zap_short.json
+            NUM_ALERTS=0
             STATUS="SUCCESS"
           fi
 
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "dast-scan" \
-            --arg target "$TARGET" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log zap_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          # 1. Chuyển đổi sang cấu trúc số liệu đo lường Prometheus
+          cat <<EOF > zap_metrics.txt
+          # HELP devsecops_dast_alerts_total Number of web vulnerabilities found by OWASP ZAP
+          # TYPE devsecops_dast_alerts_total gauge
+          devsecops_dast_alerts_total{repo="$REPO", target_url="$TARGET", scan_type="dast-scan", status="$STATUS"} $NUM_ALERTS
+          EOF
 
-          curl -k -H "Content-Type: application/json" \
-              -u "${{ secrets.LOKI_AUTH }}" \
-              -X POST ${{ secrets.LOKI_URL }} \
-              -d @loki_payload.json
+          # 2. Đẩy dữ liệu qua đường truyền mật có API Key bảo vệ
+          curl -k -X POST \
+               -u "${{ secrets.PROMETHEUS_AUTH }}" \
+               --data-binary @zap_metrics.txt \
+               ${{ secrets.PROMETHEUS_PUSHGATEWAY_URL }}
