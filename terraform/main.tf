@@ -10,7 +10,6 @@ resource "random_string" "suffix" {
   special = false
 }
 
-# ✅ VPC Module - Configuring the VPC with NAT Gateway, DNS, and Subnet Tagging
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.13.0"
@@ -27,6 +26,10 @@ module "vpc" {
   enable_nat_gateway   = true
   single_nat_gateway   = true
   enable_dns_hostnames = true
+
+  enable_flow_log                      = true
+  create_flow_log_cloudwatch_iam_role  = true
+  create_flow_log_cloudwatch_log_group = true
 
   public_subnet_tags = {
     "kubernetes.io/cluster/${local.CLUSTER_NAME}" = "shared"
@@ -53,6 +56,12 @@ module "eks" {
   subnet_ids                      = module.vpc.private_subnets
   cluster_endpoint_private_access = true
   cluster_endpoint_public_access  = true
+
+  cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+  create_kms_key = true
+  cluster_encryption_config = {
+    resources = ["secrets"]
+  }
 
   cluster_addons = {
     vpc-cni = {
