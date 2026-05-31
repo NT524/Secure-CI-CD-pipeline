@@ -147,7 +147,7 @@ jobs:
             echo "exitcode=$exitcode" >> $GITHUB_OUTPUT
             exit 0
           fi
-
+          
       - name: Terraform Apply Infrastructure
         working-directory: terraform
         if: ${{ steps.tf-plan-eks.outputs.exitcode == '2' || steps.tf-plan-eks.outputs.exitcode == '0' }}

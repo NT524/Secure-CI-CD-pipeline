@@ -12,33 +12,41 @@ COSIGN_TIMEOUT = int(os.environ.get("COSIGN_TIMEOUT_SECONDS", "30"))
 
 
 def verify_image(image: str) -> dict:
-    cmd = [
-        COSIGN_BIN,
-        "verify",
-        "--key",
-        COSIGN_KEY,
+    # 1. KIỂM TRA CHỮ KÝ (SIGNATURE)
+    cmd_sig = [
+        COSIGN_BIN, "verify",
+        "--key", COSIGN_KEY,
         "--insecure-ignore-tlog=true",
         image,
     ]
-
+    
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=COSIGN_TIMEOUT,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {"verified": False, "message": "cosign verify timed out"}
+        res_sig = subprocess.run(cmd_sig, capture_output=True, text=True, timeout=COSIGN_TIMEOUT, check=False)
+        if res_sig.returncode != 0:
+            stderr = (res_sig.stderr or res_sig.stdout or "").strip().replace("\n", " ")
+            return {"verified": False, "message": f"Thiếu chữ ký hợp lệ: {stderr[:200]}"}
     except Exception as exc:
-        return {"verified": False, "message": f"provider execution error: {exc}"}
+        return {"verified": False, "message": f"Lỗi hệ thống khi check chữ ký: {exc}"}
 
-    if result.returncode == 0:
-        return {"verified": True, "message": "signature verified with cosign public key"}
+    # 2. KIỂM TRA SBOM ATTESTATION (BỔ SUNG MỚI)
+    cmd_sbom = [
+        COSIGN_BIN, "verify-attestation",
+        "--type", "spdxjson", # Yêu cầu định dạng SBOM là SPDX
+        "--key", COSIGN_KEY,
+        "--insecure-ignore-tlog=true",
+        image,
+    ]
+    
+    try:
+        res_sbom = subprocess.run(cmd_sbom, capture_output=True, text=True, timeout=COSIGN_TIMEOUT, check=False)
+        if res_sbom.returncode != 0:
+            stderr = (res_sbom.stderr or res_sbom.stdout or "").strip().replace("\n", " ")
+            return {"verified": False, "message": f"Image có chữ ký nhưng THIẾU SBOM Attestation: {stderr[:200]}"}
+    except Exception as exc:
+        return {"verified": False, "message": f"Lỗi hệ thống khi check SBOM: {exc}"}
 
-    stderr = (result.stderr or result.stdout or "").strip().replace("\n", " ")
-    return {"verified": False, "message": stderr[:500] or "cosign verify failed"}
+    # Nếu vượt qua cả 2 bài test
+    return {"verified": True, "message": "Image hợp lệ: Đã xác thực Chữ ký và SBOM!"}
 
 
 class Handler(BaseHTTPRequestHandler):
