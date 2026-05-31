@@ -5,3 +5,4 @@ metadata:
 spec:
   timeout: 10
   url: http://cosign-gatekeeper-provider.cosign-system:8090/validate
+  insecureTLSSkipVerify: true
