@@ -6,7 +6,7 @@ spec:
   enforcementAction: deny
   match:
     namespaces:
-    - { ? { K8S_NAMESPACE } }
+    - "{{ K8S_NAMESPACE }}"
     kinds:
     - apiGroups: [ "" ]
       kinds: [ "Pod" ]

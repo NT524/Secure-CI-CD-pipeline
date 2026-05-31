@@ -29,6 +29,9 @@
         CLUSTER_NAME:
           required: true
           type: string
+        K8S_NAMESPACE:
+          required: true
+          type: string
 
   permissions:
     contents: read
@@ -42,6 +45,7 @@
     POLICY_GATE: cosign-gatekeeper-provider 
     ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
     CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
+    K8S_NAMESPACE: ${{ inputs.K8S_NAMESPACE }}
 
   jobs:
     Deploy-Gatekeeper:
@@ -52,7 +56,7 @@
         - name: Checkout source code
           uses: actions/checkout@v4
 
-        - name: Nạp AWS Credentials
+        - name: AWS Credentials
           uses: aws-actions/configure-aws-credentials@v4
           with:
             aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -135,6 +139,8 @@
             sed -i "s|{{ ECR_REGISTRY }}|${{ steps.login-ecr.outputs.registry }}|g" policy/gatekeeper/provider-deployment.yaml
             sed -i "s|{{ ECR_REPOSITORY }}|${{ env.ECR_REPOSITORY }}|g" policy/gatekeeper/provider-deployment.yaml
             sed -i "s|{{ AWS_REGION }}|${{ env.AWS_REGION }}|g" policy/gatekeeper/provider-deployment.yaml
-            
+            sed -i "s|{{ CLUSTER_NAME }}|${{ env.CLUSTER_NAME }}|g" policy/gatekeeper/provider-deployment.yaml
+            sed -i "s|{{ K8S_NAMESPACE }}|${{ env.K8S_NAMESPACE }}|g" policy/gatekeeper/provider-deployment.yaml
+
             kubectl apply -k policy/gatekeeper/
             kubectl get pods -n cosign-system

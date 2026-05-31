@@ -31,7 +31,7 @@ env:
   S3_BUCKET: ${{ secrets.S3_BUCKET }}
   S3_REGION: ${{ secrets.S3_REGION }}
   DYNAMODB_TABLE: ${{ secrets.DYNAMODB_TABLE }}
-  cluster_name: juice-shop-cluster
+  cluster_name: app-cluster
   ENVIRONMENT: ${{inputs.ENVIRONMENT}}
   
 
