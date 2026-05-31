@@ -135,6 +135,7 @@
             rm -f cosign.pub
 
         - name: Build and Push cosign verification provider image to ECR
+          working-directory: ./policy/cosign-provider
           run: |
             # 🛠️ VÁ LỖI: Điền đầy đủ tham số định danh và truyền Registry động
             REGISTRY="${{ steps.login-ecr.outputs.registry }}"
