@@ -132,3 +132,5 @@ jobs:
             -H "Content-Type: text/plain" \
             "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
             -d "$PAYLOAD"
+
+            
