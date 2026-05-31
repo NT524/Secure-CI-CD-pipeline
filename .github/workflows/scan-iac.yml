@@ -4,7 +4,6 @@ on:
   workflow_call:
 
 jobs:
-  # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
   terraform-check:
     name: Terraform Validation
     runs-on: ubuntu-latest
@@ -21,16 +20,15 @@ jobs:
       #     terraform init -backend=false -input=false -upgrade
       #     terraform validate
 
-  # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
   iac-scan:
     name: Checkov (IaC Security)
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Source Code
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Run Checkov Scan
+      - name: Run Checkov Scan
         uses: bridgecrewio/checkov-action@v12
         with:
           directory: .
@@ -38,44 +36,50 @@ jobs:
           skip_path: policy/,.github/workflows/
           output_format: json,sarif
           output_file_path: checkov-report
-          soft_fail: true
+          soft_fail: false
 
-      - name: 3. Upload Checkov Security Reports
+      - name: Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: checkov-iac-reports
           path: checkov-report*
 
-      - name: 4. Upload Checkov SARIF to GitHub Security Tab
+      - name: Upload Checkov SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           sarif_file: checkov-report/results_sarif.sarif
 
-      # - name: 5. Push Checkov Report to Grafana Loki
-      #   if: always()
-      #   run: |
-      #     TIMESTAMP=$(date +%s%N)
-      #
-      #     if [ -f "checkov-report/results_json.json" ]; then
-      #       jq '{failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, resource, severity}], passed_count: (.summary.passed // 0), failed_count: (.summary.failed // 0)}' checkov-report/results_json.json > checkov_short.json
-      #     else
-      #       echo '{"failed_checks":[],"passed_count":0,"failed_count":0}' > checkov_short.json
-      #     fi
-      #
-      #     jq -n \
-      #       --arg ts "$TIMESTAMP" \
-      #       --arg job "github-actions" \
-      #       --arg scan_type "checkov-iac-scan" \
-      #       --arg repo "${{ github.repository }}" \
-      #       --slurpfile log checkov_short.json \
-      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-      #
-      #     curl -k -H "Content-Type: application/json" \
-      #          -u "${{ secrets.LOKI_AUTH }}" \
-      #          -X POST ${{ secrets.LOKI_URL }} \
-      #          -d @loki_payload.json
+      - name: Push Checkov Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          
+          if [ -f "checkov-report/checkov-report.json" ]; then
+            # Lấy thông tin tổng quan số lỗi pass/failed và danh sách các policy bị vi phạm
+            jq '{summary: .summary, failed_checks: [.results.failed_checks[]? | {check_id, check_name, file_path, file_line_range}]}' checkov-report/checkov-report.json > checkov_short.json
+            FAILED_COUNT=$(jq '.summary.failed' checkov_short.json)
+            STATUS=$([ $FAILED_COUNT -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+          else
+            echo "{\"message\": \"No Checkov report found\"}" > checkov_short.json
+            STATUS="UNKNOWN"
+          fi
+
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "iac-scan" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
+            --slurpfile log checkov_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json
 
   conftest-scan:
     name: Conftest (Policy Scan)
@@ -91,7 +95,7 @@ jobs:
           wget -qO- "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTST_VERSION}/conftest_${CONFTST_VERSION}_Linux_x86_64.tar.gz" | tar xz
           sudo mv conftest /usr/local/bin/conftest
 
-      - name: 3. Run Conftest Static Policy Scan
+      - name: Run Conftest Static Policy Scan
         continue-on-error: true
         run: |
           set +e
@@ -102,7 +106,7 @@ jobs:
           echo "Conftest completed with exit code: $CONFTST_EXIT_CODE"
           exit 0
 
-      - name: 4. Upload Conftest Policy Reports
+      - name: Upload Conftest Policy Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -111,26 +115,42 @@ jobs:
             conftest-report.txt
             conftest-report.json
 
-      # - name: 5. Push Conftest Report to Grafana Loki
-      #   if: always()
-      #   run: |
-      #     TIMESTAMP=$(date +%s%N)
-      #
-      #     if [ -f "conftest-report.json" ]; then
-      #       jq '[.[]? | {filename, namespace, successes, failures}]' conftest-report.json > conftest_short.json
-      #     else
-      #       echo '[]' > conftest_short.json
-      #     fi
-      #
-      #     jq -n \
-      #       --arg ts "$TIMESTAMP" \
-      #       --arg job "github-actions" \
-      #       --arg scan_type "conftest-policy-scan" \
-      #       --arg repo "${{ github.repository }}" \
-      #       --slurpfile log conftest_short.json \
-      #       '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
-      #
-      #     curl -k -H "Content-Type: application/json" \
-      #          -u "${{ secrets.LOKI_AUTH }}" \
-      #          -X POST ${{ secrets.LOKI_URL }} \
-      #          -d @loki_payload.json
+      - name: Push Conftest Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+          REPO="${{ github.repository }}"
+          
+          if [ -f "conftest-report.json" ]; then
+            # 1. Rút gọn payload JSON để tiết kiệm dung lượng lưu trữ cho Loki
+            # Chỉ giữ lại tên file, số lượng test thành công và chi tiết tin nhắn lỗi (msg)
+            jq '[.[]? | {filename, namespace, successes, failures: [.failures[]? | {msg}]}]' conftest-report.json > conftest_short.json
+            
+            # 2. Đếm tổng số lỗi quy tắc (failures) trên tất cả các file được quét
+            TOTAL_FAILURES=$(jq '[.[]?.failures[]?] | length' conftest-report.json)
+            
+            if [ "$TOTAL_FAILURES" -gt 0 ]; then
+              STATUS="FAILED"
+            else
+              STATUS="SUCCESS"
+            fi
+          else
+            echo "[]" > conftest_short.json
+            STATUS="UNKNOWN"
+          fi
+
+          # 3. Đóng gói payload có cấu trúc nhãn tĩnh (stream labels) đồng bộ hệ thống
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "conftest-policy-scan" \
+            --arg repo "$REPO" \
+            --arg status "$STATUS" \
+            --slurpfile log conftest_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          # 4. Thực hiện POST đẩy dữ liệu sang Grafana Loki
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json

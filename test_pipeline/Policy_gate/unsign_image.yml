@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: malicious-juice-shop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: malicious-juice-shop
+  template:
+    metadata:
+      labels:
+        app: malicious-juice-shop
+    spec:
+      containers:
+      - name: juice-shop
+        # Bẫy OPA: Image này không được build từ Pipeline của nhóm và không có chữ ký Cosign
+        image: bkimminich/juice-shop:latest
+        ports:
+        - containerPort: 3000
+        securityContext:
+          # Bẫy OPA: Yêu cầu quyền Privilege (sẽ bị PodSecurity chặn)
+          privileged: true
