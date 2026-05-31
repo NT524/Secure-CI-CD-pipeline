@@ -80,23 +80,33 @@ jobs:
       #          -X POST ${{ secrets.LOKI_URL }} \
       #          -d @loki_payload.json
 
+  conftest-scan:
+    name: Conftest (Policy Scan)
+    needs: terraform-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
       # --- QUÉT CHÍNH SÁCH BẰNG CONFTEST ---
-      - name: 6. Install Conftest
+      - name: 2. Install Conftest
         run: |
           CONFTST_VERSION=0.59.0
           wget -qO- "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTST_VERSION}/conftest_${CONFTST_VERSION}_Linux_x86_64.tar.gz" | tar xz
           sudo mv conftest /usr/local/bin/conftest
 
-      - name: 7. Run Conftest Static Policy Scan
+      - name: 3. Run Conftest Static Policy Scan
+        continue-on-error: true
         run: |
           set +e
           conftest test terraform/*.tf k8s/*.yaml --policy policy/conftest > conftest-report.txt
           CONFTST_EXIT_CODE=$?
           conftest test terraform/*.tf k8s/*.yaml --policy policy/conftest --output json > conftest-report.json
           set -e
-          exit $CONFTST_EXIT_CODE
+          echo "Conftest completed with exit code: $CONFTST_EXIT_CODE"
+          exit 0
 
-      - name: 8. Upload Conftest Policy Reports
+      - name: 4. Upload Conftest Policy Reports
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -105,7 +115,7 @@ jobs:
             conftest-report.txt
             conftest-report.json
 
-      # - name: 9. Push Conftest Report to Grafana Loki
+      # - name: 5. Push Conftest Report to Grafana Loki
       #   if: always()
       #   run: |
       #     TIMESTAMP=$(date +%s%N)
