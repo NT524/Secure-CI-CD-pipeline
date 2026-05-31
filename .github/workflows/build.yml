@@ -99,7 +99,7 @@ jobs:
           output: "trivy-report.json"
           severity: "CRITICAL,HIGH"
           ignore-unfixed: true
-          exit-code: "0" 
+          exit-code: "1" 
       
       - name: Run Trivy scan (SARIF format)
         id: trivy-scan-sarif
