@@ -37,7 +37,6 @@ jobs:
     secrets: inherit
 
   Build:
-    needs: Scan-Application
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
       # && (needs.Scan-Application.outcome == 'success' )
