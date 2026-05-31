@@ -139,7 +139,7 @@
           run: |
             # 🛠️ VÁ LỖI: Điền đầy đủ tham số định danh và truyền Registry động
             REGISTRY="${{ steps.login-ecr.outputs.registry }}"
-            IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}/${{ env.POLICY_GATE }}:latest"
+            IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}:${{ env.POLICY_GATE }}-latest"
             
             docker build -t "$IMAGE" .
             docker push "$IMAGE"
