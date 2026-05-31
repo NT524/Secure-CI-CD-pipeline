@@ -26,42 +26,26 @@ jobs:
           path: |
             trufflehog-report.json
 
-      - name: Push TruffleHog Report to Grafana Loki
+      - name: Push TruffleHog Metrics to Grafana Prometheus
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           BRANCH="${{ github.ref_name }}"
 
           if [ -s "trufflehog-report.json" ]; then
-            echo "Phát hiện có mã bí mật lộ lọt! Đang gửi lên Loki..."
-            
-            # Sử dụng jq gom các dòng kết quả thành 1 chuỗi JSON rút gọn thông tin
-            jq '[inputs | {detector_name, decoder_name, verified, file: .source_metadata.Filesystem.file}]' trufflehog-report.json > trufflehog_short.json
-            
-            jq -n \
-              --arg ts "$TIMESTAMP" \
-              --arg job "github-actions" \
-              --arg scan_type "secret-scan" \
-              --arg repo "$REPO" \
-              --arg branch "$BRANCH" \
-              --arg status "FAILED" \
-              --slurpfile log trufflehog_short.json \
-              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+            # Đếm số lượng lỗ hổng/secrets tìm thấy từ file json (mỗi object là 1 secret)
+            NUM_SECRETS=$(jq -s 'length' trufflehog-report.json)
           else
-            echo "Mã nguồn sạch sẽ. Gửi trạng thái SUCCESS lên Loki..."
-            
-            jq -n \
-              --arg ts "$TIMESTAMP" \
-              --arg job "github-actions" \
-              --arg scan_type "secret-scan" \
-              --arg repo "$REPO" \
-              --arg branch "$BRANCH" \
-              --arg status "SUCCESS" \
-              '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo, "branch": $branch, "status": $status}, "values": [[$ts, "{\"message\": \"No secrets found.\"}"]]}]}' > loki_payload.json
+            NUM_SECRETS=0
           fi
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          # Định dạng Influx Line Protocol (Lưu ý: Không được cách dấu phẩy ở phần nhãn)
+          PAYLOAD="security_scan,repo=${REPO},branch=${BRANCH},scan_type=secret-scan secrets_count=${NUM_SECRETS}"
+
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"

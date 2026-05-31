@@ -1,0 +1,47 @@
+---
+# 1. DEPLOYMENT CHO JUICE SHOP
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-deployment
+  namespace: "{{k8s_namespace}}"
+  labels:
+    app: app-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-deployment
+  template:
+    metadata:
+      labels:
+        app: app-deployment
+    spec:
+      containers:
+      - name: app-deployment
+        image: "{{app_image}}"
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 3000
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+---
+# 2. SERVICE XUẤT PORT 80 CHO DAST SCAN
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-deployment-service
+  namespace: "{{k8s_namespace}}"
+spec:
+  type: LoadBalancer
+  selector:
+    app: app-deployment
+  ports:
+  - protocol: TCP
+    port: 80 # Mở port 80 thẳng ra Internet
+    targetPort: 3000 # Port thực tế của container

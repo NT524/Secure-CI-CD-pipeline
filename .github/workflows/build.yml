@@ -119,7 +119,7 @@ jobs:
         uses: sigstore/cosign-installer@v3
 
       - name: Push Docker Image
-        if: steps.trivy-scan.outcome == 'success'
+        # if: steps.trivy-scan.outcome == 'success'
         run: |
           docker push ${{ env.IMAGE_NAME }}
 
@@ -135,38 +135,28 @@ jobs:
           path: sbom.spdx.json
           retention-days: 7
       
-      - name: Push Cleaned Trivy Report to Grafana Loki
+      - name: Push Trivy Metrics to Grafana Prometheus
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
-          IMAGE="${{ env.IMAGE_NAME }}"
-          
-          if [ -f "trivy-report.json" ] && [ "$(jq '.Results' trivy-report.json)" != "null" ]; then
-            # Trích xuất thông tin thiết yếu từ mảng lỗ hổng
-            jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion, Severity, Title}]' trivy-report.json > trivy_short.json
-            NUM_VULNS=$(jq 'length' trivy_short.json)
-            STATUS=$([ $NUM_VULNS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
-          else
-            echo "[]" > trivy_short.json
-            STATUS="SUCCESS"
-          fi
-          
-          # Đóng gói payload gửi lên Loki
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "container-scan" \
-            --arg image "$IMAGE" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log trivy_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "image": $image, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          IMAGE="${{ steps.prep.outputs.IMAGE_NAME }}"
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH }}" \
-               -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
+          if [ -f "trivy_short.json" ]; then
+            NUM_VULNS=$(jq 'length' trivy_short.json)
+          else
+            NUM_VULNS=0
+          fi
+
+          # Chuẩn bị payload dạng Influx Line Protocol
+          PAYLOAD="security_scan,repo=${REPO},image=${IMAGE},scan_type=container-scan vulnerabilities_count=${NUM_VULNS}"
+
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"
 
       - name: Sign the published Docker image
         env:

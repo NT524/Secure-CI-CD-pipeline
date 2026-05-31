@@ -72,8 +72,8 @@ jobs:
 
             - name: Deploy to EKS
               run: |
-                  sed -i "s|{{k8s_namespace}}|${{ env.K8S_NAMESPACE }}|g" k8s/juice-shop.yaml
-                  sed -i "s|{{app_image}}|${{ env.IMAGE_NAME }}|g" k8s/juice-shop.yaml
+                  sed -i "s|{{k8s_namespace}}|${{ env.K8S_NAMESPACE }}|g" k8s/app-deploy.yaml
+                  sed -i "s|{{app_image}}|${{ env.IMAGE_NAME }}|g" k8s/app-deploy.yaml
 
                   # Áp dụng manifest đã cập nhật
                   kubectl apply -f k8s/ -n ${{ env.K8S_NAMESPACE }}
@@ -83,9 +83,9 @@ jobs:
             - name: Verify deployment
               id: verify
               run: |
-                  kubectl rollout status deployment/juice-shop -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+                  kubectl rollout status deployment/app-deployment -n ${{ env.K8S_NAMESPACE }} --timeout=120s
 
-                  RAW_URL="$(kubectl get svc juice-shop-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
+                  RAW_URL="$(kubectl get svc app-deployment-service -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')"
                   # Tự động thay thế chuỗi che khuất "***" bằng chính region đang chạy trong env
                   URL="http://$(echo "$RAW_URL" | sed "s/\*\*\*/${{ env.AWS_REGION }}/g")"
 

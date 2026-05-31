@@ -111,34 +111,24 @@ jobs:
             echo "✅ No High/Critical vulnerabilities detected. Proceeding with promotion."
           fi
 
-      - name: Push ZAP Scan Report to Grafana Loki
+      - name: Push ZAP DAST Metrics to Grafana Prometheus
         if: always()
         run: |
-          TIMESTAMP=$(date +%s%N)
           REPO="${{ github.repository }}"
           TARGET="${{ env.target }}"
 
           if [ -f "report_json.json" ]; then
-            # Rút gọn danh sách các lỗ hổng tìm thấy qua quét động
-            jq '[.site[].alerts[]? | {alert, riskdesc, confidence, cweid}]' report_json.json > zap_short.json
-            NUM_ALERTS=$(jq 'length' zap_short.json)
-            STATUS=$([ $NUM_ALERTS -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+            NUM_ALERTS=$(jq '[.site[].alerts[]?] | length' report_json.json)
           else
-            echo "[]" > zap_short.json
-            STATUS="SUCCESS"
+            NUM_ALERTS=0
           fi
 
-          jq -n \
-            --arg ts "$TIMESTAMP" \
-            --arg job "github-actions" \
-            --arg scan_type "dast-scan" \
-            --arg target "$TARGET" \
-            --arg repo "$REPO" \
-            --arg status "$STATUS" \
-            --slurpfile log zap_short.json \
-            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "target_url": $target, "repo": $repo, "status": $status}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+          PAYLOAD="security_scan,repo=${REPO},target_url=${TARGET},scan_type=dast-scan dast_alerts_count=${NUM_ALERTS}"
 
-          curl -k -H "Content-Type: application/json" \
-              -u "${{ secrets.LOKI_AUTH }}" \
-              -X POST ${{ secrets.LOKI_URL }} \
-              -d @loki_payload.json
+          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
+
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD"
