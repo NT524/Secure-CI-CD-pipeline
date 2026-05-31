@@ -59,7 +59,7 @@ jobs:
     secrets: inherit
 
   Provision-prod:
-    # needs: Scan-Infrastructure
+    needs: Scan-Infrastructure
     uses: ./.github/workflows/provision.yml
     if: |
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')

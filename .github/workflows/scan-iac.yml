@@ -36,7 +36,7 @@ jobs:
           skip_path: policy/,.github/workflows/
           output_format: json,sarif
           output_file_path: checkov-report
-          soft_fail: true
+          soft_fail: false
 
       - name: Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
