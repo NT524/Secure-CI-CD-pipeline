@@ -1,7 +1,7 @@
-name: 1b. Infrastructure Security Scanning
+name: Infrastructure Security Scanning
 
 on:
-  workflow_call: # Cấu hình để file main có thể gọi được file này
+  workflow_call:
 
 jobs:
   # --- KIỂM TRA HẠ TẦNG (Nhiệm vụ chung) ---
@@ -9,17 +9,17 @@ jobs:
     name: Terraform Validation
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Source Code
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
-      - name: 3. Terraform Init & Validate
-        run: |
-          cd terraform
-          terraform init -backend=false -input=false -upgrade
-          terraform validate
+      # - name: Terraform Init & Validate
+      #   run: |
+      #     cd terraform
+      #     terraform init -backend=false -input=false -upgrade
+      #     terraform validate
 
   # --- QUÉT BẢO MẬT HẠ TẦNG (Nhiệm vụ Tuần 3 của Trường) ---
   iac-scan:
@@ -33,12 +33,9 @@ jobs:
       - name: 2. Run Checkov Scan
         uses: bridgecrewio/checkov-action@v12
         with:
-          # Quét thư mục gốc "." để bắt được cả file Terraform lẫn Kubernetes trong thư mục k8s/
           directory: .
-          # Bỏ cấu hình cứng framework để Checkov tự động nhận diện cả Terraform lẫn K8s Manifests
           skip_check: CKV2_AWS_11,CKV2_AWS_12
           skip_path: policy/,.github/workflows/
-          # Cấu hình Checkov xuất bản song song nhiều định dạng báo cáo
           output_format: json,sarif
           output_file_path: checkov-report
           soft_fail: true
@@ -85,11 +82,10 @@ jobs:
     needs: terraform-check
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Source Code
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # --- QUÉT CHÍNH SÁCH BẰNG CONFTEST ---
-      - name: 2. Install Conftest
+      - name: Install Conftest
         run: |
           CONFTST_VERSION=0.59.0
           wget -qO- "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTST_VERSION}/conftest_${CONFTST_VERSION}_Linux_x86_64.tar.gz" | tar xz

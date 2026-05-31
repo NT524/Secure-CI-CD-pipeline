@@ -1,17 +1,16 @@
 name: DevSecOps Integrated Pipeline
 
-# 1. CẤU HÌNH TRIGGER: Khi nào thì pipeline này được chạy?
 on:
   push:
-    branches:
-      - feature/*
-      - bugfix/*
-      - dev
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
 
   pull_request:
     branches:
-      - prod
-      - staging
+      - "staging"
+      - "prod"
+    types: [opened, synchronize, reopened]
 
   workflow_dispatch:
 
@@ -24,26 +23,30 @@ permissions:
 jobs:
   #===================================CI===================================
 
-  Scan-App:
+  Scan-Application:
+    name: "Secret Scanning"
     uses: ./.github/workflows/scan-app.yml
+    secrets: inherit # Truyền toàn bộ secrets xuống repo con (Loki Auth,...)
 
-  Scan-IaC:
+  Scan-Infrastructure:
+    name: "Checkov & Conftest IaC Scan"
     uses: ./.github/workflows/scan-iac.yml
+    secrets: inherit
 
   Build:
-    needs: Scan-App
+    needs: Scan-Application
     if:
-      (github.event_name == 'pull' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-App.outcome == 'success' || needs.Scan-App.outcome == 'neutral')
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+      && (needs.Scan-Application.outcome == 'success' )
     with:
       AWS_REGION: us-east-1
     uses: ./.github/workflows/build.yml
-    secrets: inherit # Kế thừa các secret từ repo
+    secrets: inherit 
 
   #===================================CD===================================
   Provision-staging:
     uses: ./.github/workflows/provision.yml
-    needs: Scan-IaC
+    needs: Scan-Infrastructure
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
       && (needs.Scan-IaC.outcome == 'success')
@@ -53,11 +56,11 @@ jobs:
     secrets: inherit
 
   Provision-prod:
-    needs: Scan-IaC
+    needs: Scan-Infrastructure
     uses: ./.github/workflows/provision.yml
     if:
       (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      && (needs.Scan-IaC.outcome == 'success')
+      && (needs.Scan-Infrastructure.outcome == 'success')
       && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
     with:
       ENVIRONMENT: prod
