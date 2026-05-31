@@ -138,3 +138,9 @@ jobs:
               -u "${{ secrets.LOKI_AUTH }}" \
               -X POST ${{ secrets.LOKI_URL }} \
               -d @loki_payload.json
+
+          # Send payload to Loki của Trường
+          curl -k -H "Content-Type: application/json" \
+              -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
+              -X POST ${{ secrets.LOKI_URL_TRUONG }} \
+              -d @loki_payload.json

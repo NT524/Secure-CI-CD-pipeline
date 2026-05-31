@@ -1,0 +1,143 @@
+name: 1a. Application Security Scanning
+
+on:
+  workflow_call: # Cấu hình để file main có thể gọi được file này
+
+jobs:
+  # --- QUÉT MÃ NGUỒN BẢO MẬT (SAST - Nhiệm vụ của Trường) ---
+  semgrep-scan:
+    name: Semgrep (Application SAST)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+
+      # Cài đặt Semgrep CLI trực tiếp lên máy ảo để chạy lệnh linh hoạt
+      - name: 2. Install Semgrep CLI
+        run: pip install semgrep
+
+      # Chạy quét và xuất bản SARIF (JSON tiêu chuẩn của GitHub)
+      - name: 3. Run Semgrep (SARIF Format)
+        run: |
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --sarif -o semgrep-report.sarif || true
+
+      # SỬA TẠI ĐÂY: Chuyển sang xuất dạng text
+      - name: 4. Generate Semgrep Text Report
+        run: |
+          semgrep --config=p/security-audit --config=p/nodejs --config=p/owasp-top-ten --text -o semgrep-report.txt || true
+
+      # Gom cả 2 file báo cáo nộp lên đám mây lưu trữ
+      - name: 5. Upload Semgrep Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: semgrep-security-reports
+          path: |
+            semgrep-report.sarif
+            semgrep-report.txt
+
+      #  Đổi đường dẫn dùng github/codeql-action/upload-sarif@v4
+      - name: 6. Upload Semgrep SARIF to GitHub Security Tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: semgrep-report.sarif
+
+      - name: 7. Push Semgrep Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+
+          if [ -f "semgrep-report.sarif" ]; then
+            jq '[.runs[].results[]? | {ruleId, level, message: .message.text, location: .locations[0].physicalLocation.artifactLocation.uri}]' semgrep-report.sarif > semgrep_short.json
+          else
+            echo '[]' > semgrep_short.json
+          fi
+
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "semgrep-sast-scan" \
+            --arg repo "${{ github.repository }}" \
+            --slurpfile log semgrep_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
+               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
+               -d @loki_payload.json
+
+  # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
+  secret-scan:
+    name: TruffleHog (Secret Scanning)
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Bắt buộc lấy toàn bộ lịch sử commit để TruffleHog quét sâu quá khứ
+
+      # Dùng Docker chính chủ quét hệ thống file và xuất bản JSON cho máy đọc
+      - name: 2. Run TruffleHog Scan (JSON Output)
+        run: |
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json || true
+
+      # Tự động chuyển đổi log JSON thành một trang HTML tĩnh
+      - name: 3. Generate TruffleHog HTML Report
+        if: always()
+        run: |
+          echo "<html><head><title>TruffleHog Secret Scan Report</title><style>body{font-family:Arial;padding:20px;background:#f4f4f4;}pre{background:#222;color:#fff;padding:15px;border-radius:5px;overflow-x:auto;}</style></head><body>" > trufflehog-report.html
+          echo "<h1> TruffleHog Secret Scan Report</h1><p>Dưới đây là danh sách các mã bí mật, API Keys bị phát hiện lộ lọt trong mã nguồn:</p><pre>" >> trufflehog-report.html
+
+          # Nếu file json trống hoặc không có lỗi, ghi nhận an toàn
+          if [ -s trufflehog-report.json ]; then
+            cat trufflehog-report.json >> trufflehog-report.html
+          else
+            echo "Chúc mừng! Không tìm thấy thông tin nhạy cảm nào bị lộ lọt (No secrets found)." >> trufflehog-report.html
+          fi
+
+          echo "</pre></body></html>" >> trufflehog-report.html
+
+      # Gom toàn bộ báo cáo nộp lên hệ thống lưu trữ đám mây Artifacts
+      - name: 4. Upload TruffleHog Security Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trufflehog-secret-reports
+          path: |
+            trufflehog-report.json
+            trufflehog-report.html
+
+      - name: 5. Push TruffleHog Report to Grafana Loki
+        if: always()
+        run: |
+          TIMESTAMP=$(date +%s%N)
+
+          if [ -s "trufflehog-report.json" ]; then
+            jq -s '[.[] | {source_metadata, detector_name, decoder_name, verified, raw: (.raw | tostring)}]' trufflehog-report.json > trufflehog_short.json
+          else
+            echo '[]' > trufflehog_short.json
+          fi
+
+          jq -n \
+            --arg ts "$TIMESTAMP" \
+            --arg job "github-actions" \
+            --arg scan_type "trufflehog-secret-scan" \
+            --arg repo "${{ github.repository }}" \
+            --slurpfile log trufflehog_short.json \
+            '{"streams": [{"stream": {"job": $job, "scan_type": $scan_type, "repo": $repo}, "values": [[$ts, ($log[0] | @json)]]}]}' > loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH }}" \
+               -X POST ${{ secrets.LOKI_URL }} \
+               -d @loki_payload.json
+
+          curl -k -H "Content-Type: application/json" \
+               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
+               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
+               -d @loki_payload.json
