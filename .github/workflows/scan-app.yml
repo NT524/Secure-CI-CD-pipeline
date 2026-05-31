@@ -67,11 +67,6 @@ jobs:
                -X POST ${{ secrets.LOKI_URL }} \
                -d @loki_payload.json
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
-               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
-               -d @loki_payload.json
-
   # --- QUÉT LỘ LỌT THÔNG TIN NHẠY CẢM (Secrets Scanning - Nhiệm vụ của Trường) ---
   secret-scan:
     name: TruffleHog (Secret Scanning)
@@ -135,9 +130,4 @@ jobs:
           curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
                -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
-               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
                -d @loki_payload.json

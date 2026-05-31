@@ -159,12 +159,6 @@ jobs:
                -X POST ${{ secrets.LOKI_URL }} \
                -d @loki_payload.json
 
-          # Gửi thêm lên Loki của Trường
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
-               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
-               -d @loki_payload.json
-
       - name: Sign the published Docker image
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}

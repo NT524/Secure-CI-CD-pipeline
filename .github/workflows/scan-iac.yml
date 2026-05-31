@@ -80,11 +80,6 @@ jobs:
                -X POST ${{ secrets.LOKI_URL }} \
                -d @loki_payload.json
 
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
-               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
-               -d @loki_payload.json
-
       # --- QUÉT CHÍNH SÁCH BẰNG CONFTEST ---
       - name: 6. Install Conftest
         run: |
@@ -132,9 +127,4 @@ jobs:
           curl -k -H "Content-Type: application/json" \
                -u "${{ secrets.LOKI_AUTH }}" \
                -X POST ${{ secrets.LOKI_URL }} \
-               -d @loki_payload.json
-
-          curl -k -H "Content-Type: application/json" \
-               -u "${{ secrets.LOKI_AUTH_TRUONG }}" \
-               -X POST ${{ secrets.LOKI_URL_TRUONG }} \
                -d @loki_payload.json
