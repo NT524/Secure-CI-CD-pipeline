@@ -3,22 +3,22 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: juice-shop
+  name: app-deployment
   namespace: "{{k8s_namespace}}"
   labels:
-    app: juice-shop
+    app: app-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: juice-shop
+      app: app-deployment
   template:
     metadata:
       labels:
-        app: juice-shop
+        app: app-deployment
     spec:
       containers:
-      - name: juice-shop
+      - name: app-deployment
         image: "{{app_image}}"
         imagePullPolicy: Always
         ports:
@@ -35,12 +35,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: juice-shop-service
+  name: app-deployment-service
   namespace: "{{k8s_namespace}}"
 spec:
   type: LoadBalancer
   selector:
-    app: juice-shop
+    app: app-deployment
   ports:
   - protocol: TCP
     port: 80 # Mở port 80 thẳng ra Internet
