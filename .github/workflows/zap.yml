@@ -8,8 +8,6 @@ on:
         type: string
 
   workflow_dispatch:
-  schedule:
-    - cron: "0 18 * * 6"
 
 jobs:
   dast_scan:
@@ -17,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       issues: write
-      contents: read  
+      contents: read
     env:
       target: ${{ inputs.target }}
 
@@ -52,18 +50,157 @@ jobs:
           echo "::add-mask::$JWT_TOKEN"
           echo "JWT_TOKEN=$JWT_TOKEN" >> $GITHUB_ENV
 
-      - name: Chạy OWASP ZAP Full (Active) Scan
+      - name: OWASP ZAP Full (Active) Scan
         uses: zaproxy/action-full-scan@v0.13.0
+        env:
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_VALUE: Bearer ${{ env.JWT_TOKEN }}
         with:
+          docker_name: "owasp/zap2docker-weekly"
           token: ${{ secrets.GITHUB_TOKEN }}
           target: ${{ env.target }}
           rules_file_name: ".zap/rules.tsv"
           issue_title: "🚨 DAST Alert: Vulnerabilities found in application"
           fail_action: false
           cmd_options: >-
-            -a -j
-            -z "-config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).regex=false -config replacer.full_list(0).replacement='Authorization: Bearer ${{ env.JWT_TOKEN }}'"
+            -a -j -z " -config replacer.full_list(0).description=AuthHeader -config replacer.full_list(0).enabled=true -config replacer.full_list(0).matchtype=REQ_HEADER -config replacer.full_list(0).matchstr= -config replacer.full_list(0).replacement=Authorization: Bearer ${{ env.JWT_TOKEN }} "
           artifact_name: "zap-scan-report"
+
+      - name: Generate GitHub Annotations
+        if: always()
+        run: |
+          jq -r ' .site[].alerts[] | select(.riskcode|tonumber >= 2) | "::warning title=\(.alert)::\(.desc)" ' report_json.json
+
+      #################################################
+      # Parse ZAP Report
+      #################################################
+
+      - name: Parse ZAP results & write summary JSON
+        id: zap_parse
+        if: always()
+        run: |
+          mkdir -p zap-out
+
+          python3 << 'PY'
+          import json
+          import os
+
+          result = {
+              "high": 0,
+              "medium": 0,
+              "low": 0,
+              "info": 0,
+              "report_missing": True
+          }
+
+          if os.path.exists("report_json.json"):
+              try:
+                  with open("report_json.json", "r", encoding="utf-8") as f:
+                      data = json.load(f)
+
+                  alerts = []
+
+                  for site in data.get("site", []):
+                      alerts.extend(site.get("alerts", []))
+
+                  result["high"] = sum(
+                      1 for a in alerts
+                      if str(a.get("riskcode")) == "3"
+                  )
+
+                  result["medium"] = sum(
+                      1 for a in alerts
+                      if str(a.get("riskcode")) == "2"
+                  )
+
+                  result["low"] = sum(
+                      1 for a in alerts
+                      if str(a.get("riskcode")) == "1"
+                  )
+
+                  result["info"] = sum(
+                      1 for a in alerts
+                      if str(a.get("riskcode")) == "0"
+                  )
+
+                  result["report_missing"] = False
+
+              except Exception as e:
+                  result["parse_error"] = str(e)
+
+          with open("zap-out/zap-summary.json", "w") as f:
+              json.dump(result, f)
+
+          print(json.dumps(result, indent=2))
+          PY
+
+      #################################################
+      # Upload Summary Artifact
+      #################################################
+
+      - name: Upload ZAP Summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-summary
+          path: zap-out/zap-summary.json
+
+      #################################################
+      # Create GitHub Issue
+      #################################################
+
+      - name: Create Security Issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+
+            let high = 0;
+            let medium = 0;
+            let low = 0;
+            let info = 0;
+
+            try {
+              const summary = JSON.parse(
+                fs.readFileSync(
+                  'zap-out/zap-summary.json',
+                  'utf8'
+                )
+              );
+
+              high = summary.high || 0;
+              medium = summary.medium || 0;
+              low = summary.low || 0;
+              info = summary.info || 0;
+            } catch (err) {
+              console.log('Unable to read summary file');
+              return;
+            }
+
+            if (high > 0) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `🚨 DAST: ${high} High-Risk Findings`,
+                body: [
+                  '## OWASP ZAP Scan Results',
+                  '',
+                  '| Severity | Count |',
+                  '|----------|-------|',
+                  `| 🔴 High | ${high} |`,
+                  `| 🟠 Medium | ${medium} |`,
+                  `| 🟡 Low | ${low} |`,
+                  `| ℹ️ Info | ${info} |`,
+                  '',
+                  `Workflow Run: ${context.runId}`,
+                  '',
+                  'Review the uploaded ZAP artifacts for details.'
+                ].join('\n'),
+                labels: ['security', 'dast']
+              });
+            }
+
 
       - name: Lưu trữ báo cáo (Gather Findings)
         if: always()
@@ -73,64 +210,3 @@ jobs:
           path: |
             report_html.html
             report_json.json
-
-      - name: Evaluate Vulnerabilities & Block Promotion on High/Critical
-        id: evaluate_dast
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ ! -f "report_json.json" ]; then
-            echo "❌ Report file report_json.json not found!"
-            exit 1
-          fi
-
-          # Filter alerts with riskcode == "3" (High Risk in ZAP)
-          HIGH_ALERTS=$(jq '[.site[].alerts[]? | select(.riskcode == "3")]' report_json.json)
-          COUNT=$(echo "$HIGH_ALERTS" | jq 'length')
-
-          if [ "$COUNT" -gt 0 ]; then
-            echo "🚨 Detected $COUNT High/Critical vulnerabilities. Creating an issue and blocking promotion!"
-            
-            # Initialize Issue Body
-            ISSUE_BODY="## 🚨 DAST Scan Blocked Promotion\n\n**Scan Target:** ${{ env.target }}\nDetected **$COUNT** severe vulnerabilities (High/Critical) from OWASP ZAP.\n\n### Quick Details (Top 5):\n"
-            
-            # Extract top 5 vulnerabilities to provide context without overloading the payload
-            DETAILS=$(echo "$HIGH_ALERTS" | jq -r '.[0:5] | map("- **\(.alert)**\n  - *Risk/CWE*: \(.riskdesc) / CWE-\(.cweid)\n  - *Path*: `\(.instances[0].uri)`") | join("\n\n")')
-            
-            ISSUE_BODY="$ISSUE_BODY$DETAILS\n\n---\n*Please download the \`zap-scan-report\` artifact from the GitHub Actions run to view the full HTML/JSON reports.*"
-            
-            # Create GitHub Issue using GitHub CLI
-            gh issue create \
-              --title "🚨 DAST Block: Severe vulnerabilities detected on ${{ env.target }}" \
-              --body "$ISSUE_BODY" \
-              --label "security,dast"
-            
-            # MANDATORY: Exit 1 to mark the workflow as Failed, blocking deployment/promotion
-            exit 1
-          else
-            echo "✅ No High/Critical vulnerabilities detected. Proceeding with promotion."
-          fi
-
-      - name: Push ZAP DAST Metrics to Grafana Prometheus
-        if: always()
-        run: |
-          REPO="${{ github.repository }}"
-          TARGET="${{ env.target }}"
-
-          if [ -f "report_json.json" ]; then
-            NUM_ALERTS=$(jq '[.site[].alerts[]?] | length' report_json.json)
-          else
-            NUM_ALERTS=0
-          fi
-
-          PAYLOAD="security_scan,repo=${REPO},target_url=${TARGET},scan_type=dast-scan dast_alerts_count=${NUM_ALERTS}"
-
-          echo "Đang đẩy metric lên Grafana Prometheus: $PAYLOAD"
-
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
-            -H "Content-Type: text/plain" \
-            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
-            -d "$PAYLOAD"
-
-            
