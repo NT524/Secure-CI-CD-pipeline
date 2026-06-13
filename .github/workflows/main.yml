@@ -13,7 +13,7 @@ on:
     branches:
       - "staging"
       - "prod"
-    types: [closed]
+    types: [opened, synchronize, reopened]
 
   workflow_dispatch:
 
@@ -40,7 +40,7 @@ jobs:
     needs: [Scan-Application]
     if: | 
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      # && (needs.Scan-Application.outcome == 'success' )
+        && (needs.Scan-Application.outcome == 'success' )
     with:
       AWS_REGION: us-east-1
     uses: ./.github/workflows/build.yml
@@ -52,19 +52,19 @@ jobs:
     needs: Scan-Infrastructure
     if: |
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
-      # && (needs.Scan-IaC.outcome == 'success')
+        && (needs.Scan-IaC.outcome == 'success')
     with:
       ENVIRONMENT: staging
       AWS_REGION: us-east-1
     secrets: inherit
 
   Provision-prod:
-    needs: Scan-Infrastructure
+    # needs: Scan-Infrastructure
     uses: ./.github/workflows/provision.yml
     if: |
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
         && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
-      # && (needs.Scan-Infrastructure.outcome == 'success')
+        && (needs.Scan-Infrastructure.outcome == 'success')
       
     with:
       ENVIRONMENT: prod
