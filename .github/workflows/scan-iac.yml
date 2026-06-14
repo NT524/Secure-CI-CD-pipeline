@@ -77,6 +77,17 @@ jobs:
             -H "Content-Type: text/plain" \
             "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
             -d "$PAYLOAD"
+
+          if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
+            echo "Đang đẩy metric Checkov lên Grafana Prometheus của Truong: $PAYLOAD"
+
+            curl -X POST \
+              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
+              -H "Content-Type: text/plain" \
+              "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
+              -d "$PAYLOAD" \
+              || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
+          fi
   conftest-scan:
     name: Conftest (Policy Scan)
     needs: terraform-check
@@ -130,3 +141,14 @@ jobs:
             -H "Content-Type: text/plain" \
             "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
             -d "$PAYLOAD"
+
+          if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
+            echo "Đang đẩy metric IaC scan lên Grafana Prometheus của Truong: $PAYLOAD"
+
+            curl -X POST \
+              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
+              -H "Content-Type: text/plain" \
+              "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
+              -d "$PAYLOAD" \
+              || echo "Canh bao: push metric IaC scan sang Grafana Prometheus cua Truong that bai"
+          fi
