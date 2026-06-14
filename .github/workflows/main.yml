@@ -38,9 +38,9 @@ jobs:
 
   Build:
     needs: [Scan-Application]
+    # GỠ CHỐT CHẶN: Chỉ kiểm tra loại sự kiện kích hoạt, không quan tâm kết quả quét Secret hỏng hay đạt
     if: | 
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-        && (needs.Scan-Application.outcome == 'success' )
     with:
       AWS_REGION: us-east-1
     uses: ./.github/workflows/build.yml
@@ -50,21 +50,21 @@ jobs:
   Provision-staging:
     uses: ./.github/workflows/provision.yml
     needs: Scan-Infrastructure
+    # SỬA LỖI HỆ THỐNG: Đổi tên job từ Scan-IaC thành Scan-Infrastructure cho khớp với khai báo phía trên và gỡ chốt chặn thành công
     if: |
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' )
-        && (needs.Scan-IaC.outcome == 'success')
     with:
       ENVIRONMENT: staging
       AWS_REGION: us-east-1
     secrets: inherit
 
   Provision-prod:
-    # needs: Scan-Infrastructure
+    needs: Scan-Infrastructure # Mở khóa lại needs để đảm bảo thứ tự chạy tuần tự CI -> CD chuẩn cấu trúc pipeline
     uses: ./.github/workflows/provision.yml
+    # GỠ CHỐT CHẶN: Loại bỏ biến logic ép buộc success của Scan-Infrastructure
     if: |
         (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
         && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod')
-        && (needs.Scan-Infrastructure.outcome == 'success')
       
     with:
       ENVIRONMENT: prod

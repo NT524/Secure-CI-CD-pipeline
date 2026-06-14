@@ -111,12 +111,12 @@ jobs:
               -d @loki-payload.json || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
           fi
 
-          # 4. TRẬN ĐÁNH CUỐI: Ép trả về mã 0 để không làm sập pipeline tổng, phục vụ test Trivy và DAST
-          echo "Checkov kết thúc với mã lỗi thực tế: $CHECKOV_EXIT_CODE"
+          # 4. TRẬN ĐÁNH CUỐI: Trả lại đúng exit code ban đầu của Checkov để quyết định dừng pipeline
+          echo "Checkov kết thúc với mã lỗi: $CHECKOV_EXIT_CODE"
           if [ $CHECKOV_EXIT_CODE -ne 0 ]; then
-            echo "⚠️ CẢNH BÁO: Phát hiện lỗi cấu hình an toàn hạ tầng! Nhưng hệ thống tự động bỏ qua (Exit 0) để phục vụ kiểm thử chuỗi CD."
+            echo "🚨 Phát hiện lỗi cấu hình an toàn hạ tầng! Ngắt tiến trình build/deploy."
+            exit $CHECKOV_EXIT_CODE
           fi
-          exit 0
 
       - name: Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
@@ -153,7 +153,6 @@ jobs:
           conftest test terraform/*.tf k8s/*.yaml --policy policy/conftest --output json > conftest-report.json
           set -e
           echo "Conftest completed with exit code: $CONFTST_EXIT_CODE"
-          # Ép trả về mã 0 tương tự như Checkov để thông mạch CD phía sau
           exit 0
 
       - name: Upload Conftest Policy Reports
