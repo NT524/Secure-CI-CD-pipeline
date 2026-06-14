@@ -58,12 +58,8 @@ jobs:
           # 2. Xử lý trích xuất số liệu Metric cho Prometheus
           REPO="${{ github.repository }}"
           if [ -f "checkov-report/checkov-report.json" ]; then
-            # Kiểm tra xem JSON trả về là dạng mảng (Array) hay đối tượng đơn lẻ để cộng tổng số lỗi failed chính xác nhất
-            if jq '. | is_array' checkov-report/checkov-report.json | grep -q "true"; then
-              FAILED_COUNT=$(jq '[.[].summary.failed] | add' checkov-report/checkov-report.json || echo 0)
-            else
-              FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
-            fi
+            # Sử dụng toán tử kiểm tra type trực tiếp bên trong câu lệnh jq thay vì hàm is_array để tương thích mọi phiên bản jq
+            FAILED_COUNT=$(jq 'if type == "array" then [.[].summary.failed] | add else .summary.failed end' checkov-report/checkov-report.json || echo 0)
             
             # Khử giá trị rỗng hoặc null để tránh lỗi cú pháp toán tử so sánh chuỗi nguyên của Shell
             if [ -z "$FAILED_COUNT" ] || [ "$FAILED_COUNT" = "null" ]; then
@@ -88,16 +84,19 @@ jobs:
           if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
             echo "Đang đẩy metric Checkov lên Grafana Prometheus của Truong: $PAYLOAD"
             curl -X POST \
-              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
+              -u "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
               -H "Content-Type: text/plain" \
               "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
               -d "$PAYLOAD" || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
           fi
 
-          # 3. Xử lý đẩy file bản ghi JSON báo cáo thô lên Loki thông qua echo một dòng
+          # 3. Xử lý đẩy file bản ghi JSON báo cáo thô lên Loki thông qua tinh gọn cấu trúc dữ liệu
           if [ -f "checkov-report/checkov-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
             NOW_NS="$(date +%s%N)"
-            LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
+            
+            # Giải pháp thu gọn dữ liệu: Chỉ trích xuất danh sách lỗi thực tế 'failed_checks' để ép dung lượng file xuống dưới mức giới hạn 256KB của Loki
+            jq 'if type == "array" then [.[].results.failed_checks[]] else .results.failed_checks end' checkov-report/checkov-report.json > checkov-report/failed_only.json
+            LOG_LINE="$(jq -Rs . < checkov-report/failed_only.json)"
 
             echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-iac\", \"repo\": \"${REPO}\", \"scan_type\": \"iac-checkov\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
 
@@ -109,7 +108,7 @@ jobs:
               -d @loki-payload.json || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
           fi
 
-          # 4. Trả lại đúng exit code ban đầu của Checkov để quyết định dừng pipeline
+          # 4. TRẬN ĐÁNH CUỐI: Trả lại đúng exit code ban đầu của Checkov để quyết định dừng pipeline
           echo "Checkov kết thúc với mã lỗi: $CHECKOV_EXIT_CODE"
           if [ $CHECKOV_EXIT_CODE -ne 0 ]; then
             echo "🚨 Phát hiện lỗi cấu hình an toàn hạ tầng! Ngắt tiến trình build/deploy."
