@@ -28,15 +28,75 @@ jobs:
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      - name: Run Checkov Scan
-        uses: bridgecrewio/checkov-action@v12
-        with:
-          directory: .
-          skip_check: CKV2_AWS_11,CKV2_AWS_12,CKV_AWS_39,CKV_AWS_38
-          skip_path: policy/,.github/workflows/
-          output_format: json,sarif
-          output_file_path: checkov-report
-          soft_fail: false
+      - name: Install Checkov CLI via pip
+        run: |
+          pip3 install --no-cache-dir checkov
+          mkdir -p checkov-report
+
+      - name: Run Checkov & Ship Telemetry to Grafana
+        run: |
+          # 1. Bật chế độ không sập script ngay lập tức để chạy hết các tác vụ telemetry phía dưới
+          set +e
+          checkov -d . \
+            --skip-check CKV2_AWS_11,CKV2_AWS_12,CKV_AWS_39,CKV_AWS_38 \
+            --skip-path policy/ \
+            --skip-path .github/workflows/ \
+            -o json > checkov-report/checkov-report.json \
+            -o sarif > checkov-report/results_sarif.sarif
+          
+          # Lưu lại trạng thái exit code của Checkov (0: sạch lỗi, khác 0: có lỗi bảo mật)
+          CHECKOV_EXIT_CODE=$?
+          set -e
+
+          # 2. Xử lý trích xuất số liệu Metric cho Prometheus
+          REPO="${{ github.repository }}"
+          if [ -f "checkov-report/checkov-report.json" ]; then
+            FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
+            STATUS=$([ "$FAILED_COUNT" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
+          else
+            FAILED_COUNT=0
+            STATUS="UNKNOWN"
+          fi
+
+          PAYLOAD="security_scan,repo=${REPO},scan_type=iac-checkov,status=${STATUS} checkov_failed_count=${FAILED_COUNT}"
+
+          echo "Đang đẩy metric Checkov lên Grafana Prometheus hệ thống: $PAYLOAD"
+          curl -X POST \
+            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
+            -H "Content-Type: text/plain" \
+            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
+            -d "$PAYLOAD" || true
+
+          if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
+            echo "Đang đẩy metric Checkov lên Grafana Prometheus của Truong: $PAYLOAD"
+            curl -X POST \
+              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
+              -H "Content-Type: text/plain" \
+              "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
+              -d "$PAYLOAD" || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
+          fi
+
+          # 3. Xử lý nén cấu trúc và đẩy file Log thô lên Loki
+          if [ -f "checkov-report/checkov-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
+            NOW_NS="$(date +%s%N)"
+            LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
+
+            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-iac\", \"repo\": \"${REPO}\", \"scan_type\": \"iac-checkov\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
+
+            echo "Đang đẩy báo cáo Checkov sang Grafana Loki của Truong..."
+            curl -X POST \
+              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
+              -H "Content-Type: application/json" \
+              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
+              -d @loki-payload.json || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
+          fi
+
+          # 4. Trả lại đúng exit code ban đầu của Checkov để quyết định số phận pipeline
+          echo "Checkov kết thúc với mã lỗi: $CHECKOV_EXIT_CODE"
+          if [ $CHECKOV_EXIT_CODE -ne 0 ]; then
+            echo "🚨 Phát hiện lỗi cấu hình an toàn hạ tầng! Ngắt tiến trình build/deploy."
+            exit $CHECKOV_EXIT_CODE
+          fi
 
       - name: Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
@@ -50,61 +110,6 @@ jobs:
         if: always()
         with:
           sarif_file: checkov-report/results_sarif.sarif
-
-      - name: Push Checkov Metrics to Grafana Cloud Prometheus
-        if: always()
-        run: |
-          REPO="${{ github.repository }}"
-          
-          if [ -f "checkov-report/checkov-report.json" ]; then
-            # Trích xuất trực tiếp số lượng check bị fail từ summary
-            FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
-            STATUS=$([ "$FAILED_COUNT" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
-          else
-            FAILED_COUNT=0
-            STATUS="UNKNOWN"
-          fi
-
-          # Chuẩn bị payload theo chuẩn Influx Line Protocol đồng bộ với hệ thống
-          PAYLOAD="security_scan,repo=${REPO},scan_type=iac-checkov,status=${STATUS} checkov_failed_count=${FAILED_COUNT}"
-
-          echo "Đang đẩy metric Checkov lên Grafana Prometheus: $PAYLOAD"
-
-          # Gửi qua endpoint tương thích của Grafana Cloud (Sử dụng lại cặp Secret đã tạo)
-          curl -X POST \
-            -H "Authorization: Bearer ${{ secrets.PROMETHEUS_AUTH }}" \
-            -H "Content-Type: text/plain" \
-            "https://prometheus-prod-37-prod-ap-southeast-1.grafana.net/api/v1/push/influx/write" \
-            -d "$PAYLOAD"
-
-          if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
-            echo "Đang đẩy metric Checkov lên Grafana Prometheus của Truong: $PAYLOAD"
-
-            curl -X POST \
-              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
-              -H "Content-Type: text/plain" \
-              "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
-              -d "$PAYLOAD" \
-              || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
-          fi
-
-      - name: Push Checkov Report to Loki
-        if: always()
-        run: |
-          if [ -f "checkov-report/checkov-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
-            NOW_NS="$(date +%s%N)"
-            LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
-
-            # Tạo payload JSON an toàn cho Loki thông qua lệnh echo một dòng duy nhất
-            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-iac\", \"repo\": \"${{ github.repository }}\", \"scan_type\": \"iac-checkov\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
-
-            curl -X POST \
-              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
-              -H "Content-Type: application/json" \
-              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
-              -d @loki-payload.json \
-              || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
-          fi
 
   conftest-scan:
     name: Conftest (Policy Scan)
