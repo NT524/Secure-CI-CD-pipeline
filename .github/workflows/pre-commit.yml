@@ -1,13 +1,7 @@
 name: Pre-commit Security Gate
 
 on:
-  push:
-  pull_request:
-    branches:
-      - main
-      - dev
-      - staging
-      - prod
+  workflow_dispatch:
 
 jobs:
   pre-commit-compliance:
