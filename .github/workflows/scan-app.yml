@@ -68,25 +68,10 @@ jobs:
             NOW_NS="$(date +%s%N)"
             LOG_LINE="$(jq -Rs . < trufflehog-report.json)"
 
-            cat > loki-payload.json <<EOF
-            {
-              "streams": [
-                {
-                  "stream": {
-                    "service": "github-actions",
-                    "workflow": "scan-app",
-                    "repo": "${{ github.repository }}",
-                    "branch": "${{ github.ref_name }}",
-                    "scan_type": "secret-scan"
-                  },
-                  "values": [
-                    [ "${NOW_NS}", ${LOG_LINE} ]
-                  ]
-                }
-              ]
-            }
-            EOF
+            # BẮT BUỘC PHẢI CÓ DÒNG NÀY: Tạo ra file payload trước khi push
+            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-app\", \"repo\": \"${{ github.repository }}\", \"branch\": \"${{ github.ref_name }}\", \"scan_type\": \"secret-scan\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
 
+            # Sau đó mới gọi curl để đọc file @loki-payload.json vừa tạo
             curl -X POST \
               -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
               -H "Content-Type: application/json" \

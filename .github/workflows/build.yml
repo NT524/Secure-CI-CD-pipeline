@@ -188,23 +188,8 @@ jobs:
             NOW_NS="$(date +%s%N)"
             LOG_LINE="$(jq -Rs . < trivy-report.json)"
 
-            cat > loki-payload.json <<EOF
-            {
-              "streams": [
-                {
-                  "stream": {
-                    "service": "github-actions",
-                    "workflow": "build",
-                    "repo": "${{ github.repository }}",
-                    "scan_type": "container-scan"
-                  },
-                  "values": [
-                    [ "${NOW_NS}", ${LOG_LINE} ]
-                  ]
-                }
-              ]
-            }
-            EOF
+            # Tạo payload JSON an toàn cho Loki thông qua lệnh echo một dòng duy nhất
+            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"build\", \"repo\": \"${{ github.repository }}\", \"scan_type\": \"container-scan\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
 
             curl -X POST \
               -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \

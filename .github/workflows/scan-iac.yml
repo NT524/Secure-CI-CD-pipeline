@@ -66,7 +66,6 @@ jobs:
           fi
 
           # Chuẩn bị payload theo chuẩn Influx Line Protocol đồng bộ với hệ thống
-          # Metric tạo ra trong Prometheus sẽ là: security_scan_checkov_failed_count
           PAYLOAD="security_scan,repo=${REPO},scan_type=iac-checkov,status=${STATUS} checkov_failed_count=${FAILED_COUNT}"
 
           echo "Đang đẩy metric Checkov lên Grafana Prometheus: $PAYLOAD"
@@ -96,23 +95,8 @@ jobs:
             NOW_NS="$(date +%s%N)"
             LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
 
-            cat > loki-payload.json <<EOF
-            {
-              "streams": [
-                {
-                  "stream": {
-                    "service": "github-actions",
-                    "workflow": "scan-iac",
-                    "repo": "${{ github.repository }}",
-                    "scan_type": "iac-checkov"
-                  },
-                  "values": [
-                    [ "${NOW_NS}", ${LOG_LINE} ]
-                  ]
-                }
-              ]
-            }
-            EOF
+            # Tạo payload JSON an toàn cho Loki thông qua lệnh echo một dòng duy nhất
+            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-iac\", \"repo\": \"${{ github.repository }}\", \"scan_type\": \"iac-checkov\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
 
             curl -X POST \
               -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
@@ -121,6 +105,7 @@ jobs:
               -d @loki-payload.json \
               || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
           fi
+
   conftest-scan:
     name: Conftest (Policy Scan)
     needs: terraform-check
@@ -193,23 +178,8 @@ jobs:
             NOW_NS="$(date +%s%N)"
             LOG_LINE="$(jq -Rs . < conftest-report.json)"
 
-            cat > loki-payload.json <<EOF
-            {
-              "streams": [
-                {
-                  "stream": {
-                    "service": "github-actions",
-                    "workflow": "scan-iac",
-                    "repo": "${{ github.repository }}",
-                    "scan_type": "iac-scan"
-                  },
-                  "values": [
-                    [ "${NOW_NS}", ${LOG_LINE} ]
-                  ]
-                }
-              ]
-            }
-            EOF
+            # Tạo payload JSON an toàn cho Loki thông qua lệnh echo một dòng duy nhất
+            echo "{\"streams\": [{\"stream\": {\"service\": \"github-actions\", \"workflow\": \"scan-iac\", \"repo\": \"${{ github.repository }}\", \"scan_type\": \"iac-scan\"}, \"values\": [[ \"${NOW_NS}\", ${LOG_LINE} ]]}]}" > loki-payload.json
 
             curl -X POST \
               -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
