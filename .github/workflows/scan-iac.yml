@@ -58,8 +58,8 @@ jobs:
           # 2. Xử lý trích xuất số liệu Metric cho Prometheus
           REPO="${{ github.repository }}"
           if [ -f "checkov-report/checkov-report.json" ]; then
-            # Sử dụng toán tử kiểm tra type trực tiếp bên trong câu lệnh jq thay vì hàm is_array để tương thích mọi phiên bản jq
-            FAILED_COUNT=$(jq 'if type == "array" then [.[].summary.failed] | add else .summary.failed end' checkov-report/checkov-report.json || echo 0)
+            # Công thức trích xuất tổng lỗi failed tối ưu cho cấu trúc thực tế của Checkov CLI
+            FAILED_COUNT=$(jq '[if type == "array" then .[].summary.failed else .summary.failed end] | map(select(. != null)) | add' checkov-report/checkov-report.json || echo 0)
             
             # Khử giá trị rỗng hoặc null để tránh lỗi cú pháp toán tử so sánh chuỗi nguyên của Shell
             if [ -z "$FAILED_COUNT" ] || [ "$FAILED_COUNT" = "null" ]; then
@@ -84,7 +84,7 @@ jobs:
           if [ -n "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" ]; then
             echo "Đang đẩy metric Checkov lên Grafana Prometheus của Truong: $PAYLOAD"
             curl -X POST \
-              -u "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
+              -u "${{ secrets.PROMETHEUS_USERNAME_TRUONG }}:${{ secrets.PROMETHEUS_PASSWORD_TRUONG }}" \
               -H "Content-Type: text/plain" \
               "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
               -d "$PAYLOAD" || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
