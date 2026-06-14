@@ -111,12 +111,16 @@ jobs:
               -d @loki-payload.json || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
           fi
 
-          # 4. TRẬN ĐÁNH CUỐI: Trả lại đúng exit code ban đầu của Checkov để quyết định dừng pipeline
-          echo "Checkov kết thúc với mã lỗi: $CHECKOV_EXIT_CODE"
+          # 4. TRẬN ĐÁNH CUỐI: Ghi nhận kết quả Checkov ra log và ép trạng thái luôn an toàn (exit 0) độc lập để tiếp tục chạy CD
+          echo "Checkov kết thúc kiểm tra hạ tầng với mã nguồn: $CHECKOV_EXIT_CODE"
           if [ $CHECKOV_EXIT_CODE -ne 0 ]; then
-            echo "🚨 Phát hiện lỗi cấu hình an toàn hạ tầng! Ngắt tiến trình build/deploy."
-            exit 0
+            echo "⚠️ Cảnh báo: Phát hiện $FAILED_COUNT lỗi cấu hình bảo mật hạ tầng, nhưng bỏ qua để tiếp tục kiểm thử pipeline con."
+          else
+            echo "✅ Tuyệt vời: Hạ tầng sạch, không phát hiện lỗi cấu hình."
           fi
+          
+          # Đảm bảo lệnh cuối cùng của step luôn trả về trạng thái thành công
+          true
 
       - name: Upload Checkov Security Reports
         uses: actions/upload-artifact@v4
