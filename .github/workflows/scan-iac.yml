@@ -37,21 +37,39 @@ jobs:
         run: |
           # 1. Bật chế độ không sập script ngay lập tức để chạy hết các tác vụ telemetry phía dưới
           set +e
+          
+          # Sử dụng cơ chế xuất file tự động chuẩn của Checkov CLI để không làm hỏng cấu trúc SARIF
           checkov -d . \
             --skip-check CKV2_AWS_11,CKV2_AWS_12,CKV_AWS_39,CKV_AWS_38 \
             --skip-path policy/ \
             --skip-path .github/workflows/ \
-            -o json > checkov-report/checkov-report.json \
-            -o sarif > checkov-report/results_sarif.sarif
+            --output json --output sarif \
+            --output-file-path checkov-report
           
-          # Lưu lại trạng thái exit code của Checkov (0: sạch lỗi, khác 0: có lỗi bảo mật)
+          # Lưu lại trạng thái exit code gốc của Checkov (0: sạch lỗi, khác 0: có lỗ hổng)
           CHECKOV_EXIT_CODE=$?
           set -e
+
+          # Đồng bộ lại tên file JSON do Checkov CLI tự động sinh ra khi dùng chung tham số output-file-path
+          if [ -f "checkov-report/results_json.json" ]; then
+            mv checkov-report/results_json.json checkov-report/checkov-report.json
+          fi
 
           # 2. Xử lý trích xuất số liệu Metric cho Prometheus
           REPO="${{ github.repository }}"
           if [ -f "checkov-report/checkov-report.json" ]; then
-            FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
+            # Kiểm tra xem JSON trả về là dạng mảng (Array) hay đối tượng đơn lẻ để cộng tổng số lỗi failed chính xác nhất
+            if jq '. | is_array' checkov-report/checkov-report.json | grep -q "true"; then
+              FAILED_COUNT=$(jq '[.[].summary.failed] | add' checkov-report/checkov-report.json || echo 0)
+            else
+              FAILED_COUNT=$(jq '.summary.failed' checkov-report/checkov-report.json || echo 0)
+            fi
+            
+            # Khử giá trị rỗng hoặc null để tránh lỗi cú pháp toán tử so sánh chuỗi nguyên của Shell
+            if [ -z "$FAILED_COUNT" ] || [ "$FAILED_COUNT" = "null" ]; then
+              FAILED_COUNT=0
+            fi
+            
             STATUS=$([ "$FAILED_COUNT" -gt 0 ] && echo "FAILED" || echo "SUCCESS")
           else
             FAILED_COUNT=0
@@ -76,7 +94,7 @@ jobs:
               -d "$PAYLOAD" || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
           fi
 
-          # 3. Xử lý nén cấu trúc và đẩy file Log thô lên Loki
+          # 3. Xử lý đẩy file bản ghi JSON báo cáo thô lên Loki thông qua echo một dòng
           if [ -f "checkov-report/checkov-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
             NOW_NS="$(date +%s%N)"
             LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
@@ -91,7 +109,7 @@ jobs:
               -d @loki-payload.json || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
           fi
 
-          # 4. Trả lại đúng exit code ban đầu của Checkov để quyết định số phận pipeline
+          # 4. Trả lại đúng exit code ban đầu của Checkov để quyết định dừng pipeline
           echo "Checkov kết thúc với mã lỗi: $CHECKOV_EXIT_CODE"
           if [ $CHECKOV_EXIT_CODE -ne 0 ]; then
             echo "🚨 Phát hiện lỗi cấu hình an toàn hạ tầng! Ngắt tiến trình build/deploy."
@@ -103,7 +121,7 @@ jobs:
         if: always()
         with:
           name: checkov-iac-reports
-          path: checkov-report*
+          path: checkov-report/
 
       - name: Upload Checkov SARIF to GitHub Security Tab
         uses: github/codeql-action/upload-sarif@v4
