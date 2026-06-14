@@ -143,3 +143,36 @@ jobs:
               -d "$PAYLOAD" \
               || echo "Canh bao: push metric ZAP DAST sang Grafana Prometheus cua Truong that bai"
           fi
+
+      - name: Push ZAP Report to Loki
+        if: always()
+        run: |
+          if [ -f "report_json.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
+            NOW_NS="$(date +%s%N)"
+            LOG_LINE="$(jq -Rs . < report_json.json)"
+
+            cat > loki-payload.json <<EOF
+            {
+              "streams": [
+                {
+                  "stream": {
+                    "service": "github-actions",
+                    "workflow": "zap",
+                    "repo": "${{ github.repository }}",
+                    "scan_type": "dast-scan"
+                  },
+                  "values": [
+                    [ "${NOW_NS}", ${LOG_LINE} ]
+                  ]
+                }
+              ]
+            }
+            EOF
+
+            curl -X POST \
+              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
+              -H "Content-Type: application/json" \
+              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
+              -d @loki-payload.json \
+              || echo "Canh bao: push log ZAP sang Loki cua Truong that bai"
+          fi

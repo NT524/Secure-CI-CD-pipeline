@@ -88,6 +88,39 @@ jobs:
               -d "$PAYLOAD" \
               || echo "Canh bao: push metric Checkov sang Grafana Prometheus cua Truong that bai"
           fi
+
+      - name: Push Checkov Report to Loki
+        if: always()
+        run: |
+          if [ -f "checkov-report/checkov-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
+            NOW_NS="$(date +%s%N)"
+            LOG_LINE="$(jq -Rs . < checkov-report/checkov-report.json)"
+
+            cat > loki-payload.json <<EOF
+            {
+              "streams": [
+                {
+                  "stream": {
+                    "service": "github-actions",
+                    "workflow": "scan-iac",
+                    "repo": "${{ github.repository }}",
+                    "scan_type": "iac-checkov"
+                  },
+                  "values": [
+                    [ "${NOW_NS}", ${LOG_LINE} ]
+                  ]
+                }
+              ]
+            }
+            EOF
+
+            curl -X POST \
+              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
+              -H "Content-Type: application/json" \
+              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
+              -d @loki-payload.json \
+              || echo "Canh bao: push log Checkov sang Loki cua Truong that bai"
+          fi
   conftest-scan:
     name: Conftest (Policy Scan)
     needs: terraform-check
@@ -151,4 +184,37 @@ jobs:
               "${{ secrets.PROMETHEUS_WRITE_URL_TRUONG }}" \
               -d "$PAYLOAD" \
               || echo "Canh bao: push metric IaC scan sang Grafana Prometheus cua Truong that bai"
+          fi
+
+      - name: Push Conftest Report to Loki
+        if: always()
+        run: |
+          if [ -f "conftest-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
+            NOW_NS="$(date +%s%N)"
+            LOG_LINE="$(jq -Rs . < conftest-report.json)"
+
+            cat > loki-payload.json <<EOF
+            {
+              "streams": [
+                {
+                  "stream": {
+                    "service": "github-actions",
+                    "workflow": "scan-iac",
+                    "repo": "${{ github.repository }}",
+                    "scan_type": "iac-scan"
+                  },
+                  "values": [
+                    [ "${NOW_NS}", ${LOG_LINE} ]
+                  ]
+                }
+              ]
+            }
+            EOF
+
+            curl -X POST \
+              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
+              -H "Content-Type: application/json" \
+              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
+              -d @loki-payload.json \
+              || echo "Canh bao: push log Conftest sang Loki cua Truong that bai"
           fi

@@ -60,3 +60,37 @@ jobs:
               -d "$PAYLOAD" \
               || echo "Canh bao: push metric sang Grafana Prometheus cua Truong that bai"
           fi
+
+      - name: Push TruffleHog Report to Loki
+        if: always()
+        run: |
+          if [ -f "trufflehog-report.json" ] && [ -n "${{ secrets.LOKI_PUSH_URL_TRUONG }}" ] && [ -n "${{ secrets.LOKI_USERNAME_TRUONG }}" ] && [ -n "${{ secrets.LOKI_PASSWORD_TRUONG }}" ]; then
+            NOW_NS="$(date +%s%N)"
+            LOG_LINE="$(jq -Rs . < trufflehog-report.json)"
+
+            cat > loki-payload.json <<EOF
+            {
+              "streams": [
+                {
+                  "stream": {
+                    "service": "github-actions",
+                    "workflow": "scan-app",
+                    "repo": "${{ github.repository }}",
+                    "branch": "${{ github.ref_name }}",
+                    "scan_type": "secret-scan"
+                  },
+                  "values": [
+                    [ "${NOW_NS}", ${LOG_LINE} ]
+                  ]
+                }
+              ]
+            }
+            EOF
+
+            curl -X POST \
+              -u "${{ secrets.LOKI_USERNAME_TRUONG }}:${{ secrets.LOKI_PASSWORD_TRUONG }}" \
+              -H "Content-Type: application/json" \
+              "${{ secrets.LOKI_PUSH_URL_TRUONG }}" \
+              -d @loki-payload.json \
+              || echo "Canh bao: push log TruffleHog sang Loki cua Truong that bai"
+          fi
