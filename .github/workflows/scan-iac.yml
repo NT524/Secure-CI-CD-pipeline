@@ -31,6 +31,8 @@ jobs:
       - name: Install Checkov CLI via pip
         run: |
           pip3 install --no-cache-dir checkov
+          # Dọn dẹp sạch sẽ thư mục report trước khi quét để tránh cộng dồn số liệu ảo
+          rm -rf checkov-report
           mkdir -p checkov-report
 
       - name: Run Checkov & Ship Telemetry to Grafana
@@ -38,11 +40,12 @@ jobs:
           # 1. Bật chế độ không sập script ngay lập tức để chạy hết các tác vụ telemetry phía dưới
           set +e
           
-          # Sử dụng cơ chế xuất file tự động chuẩn của Checkov CLI để không làm hỏng cấu trúc SARIF
+          # Đổi sang quét chỉ định thư mục và loại bỏ thư mục report để ngăn Checkov quét đè file JSON
           checkov -d . \
             --skip-check CKV2_AWS_11,CKV2_AWS_12,CKV_AWS_39,CKV_AWS_38 \
             --skip-path policy/ \
             --skip-path .github/workflows/ \
+            --skip-path checkov-report/ \
             --output json --output sarif \
             --output-file-path checkov-report
           
@@ -58,10 +61,10 @@ jobs:
           # 2. Xử lý trích xuất số liệu Metric cho Prometheus
           REPO="${{ github.repository }}"
           if [ -f "checkov-report/checkov-report.json" ]; then
-            # Công thức trích xuất tổng lỗi failed tối ưu cho cấu trúc thực tế của Checkov CLI
-            FAILED_COUNT=$(jq '[if type == "array" then .[].summary.failed else .summary.failed end] | map(select(. != null)) | add' checkov-report/checkov-report.json || echo 0)
+            # Công thức lọc chuẩn xác: Lấy mảng các giá trị failed và bỏ qua null
+            FAILED_COUNT=$(jq 'if type == "array" then [.[].summary.failed] | map(select(. != null)) | add else .summary.failed end' checkov-report/checkov-report.json || echo 0)
             
-            # Khử giá trị rỗng hoặc null để tránh lỗi cú pháp toán tử so sánh chuỗi nguyên của Shell
+            # Khử hoàn toàn giá trị rỗng hoặc null
             if [ -z "$FAILED_COUNT" ] || [ "$FAILED_COUNT" = "null" ]; then
               FAILED_COUNT=0
             fi
