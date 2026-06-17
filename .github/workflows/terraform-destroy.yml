@@ -39,7 +39,9 @@ jobs:
       - name: Terraform Destroy
         run: |
           if [ -d "terraform" ]; then
-            terraform -chdir=terraform destroy -auto-approve
+            terraform -chdir=terraform destroy -auto-approve \
+              -var="ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}"
           else
-            terraform destroy -auto-approve
+            terraform destroy -auto-approve \
+              -var="ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}"
           fi
