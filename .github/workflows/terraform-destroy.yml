@@ -23,9 +23,17 @@ jobs:
       - name: Terraform Init
         run: |
           if [ -d "terraform" ]; then
-            terraform -chdir=terraform init -upgrade -input=false
+            terraform -chdir=terraform init -upgrade -input=false \
+              -backend-config="bucket=${{ secrets.S3_BUCKET }}" \
+              -backend-config="key=terraform.tfstate" \
+              -backend-config="region=us-east-1" \
+              -backend-config="dynamodb_table=${{ secrets.DYNAMODB_TABLE }}"
           else
-            terraform init -upgrade -input=false
+            terraform init -upgrade -input=false \
+              -backend-config="bucket=${{ secrets.S3_BUCKET }}" \
+              -backend-config="key=terraform.tfstate" \
+              -backend-config="region=us-east-1" \
+              -backend-config="dynamodb_table=${{ secrets.DYNAMODB_TABLE }}"
           fi
 
       - name: Terraform Destroy
