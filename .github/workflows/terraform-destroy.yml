@@ -41,9 +41,11 @@ jobs:
           if [ -d "terraform" ]; then
             terraform -chdir=terraform destroy -auto-approve \
               -var="ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}" \
+              -var="ARN_POLICY=${{ secrets.ARN_POLICY }}" \
               -lock=false
           else
             terraform destroy -auto-approve \
               -var="ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}" \
+              -var="ARN_POLICY=${{ secrets.ARN_POLICY }}" \
               -lock=false
           fi
