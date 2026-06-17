@@ -23,9 +23,9 @@ jobs:
       - name: Terraform Init
         run: |
           if [ -d "terraform" ]; then
-            terraform -chdir=terraform init
+            terraform -chdir=terraform init -upgrade
           else
-            terraform init
+            terraform init -upgrade
           fi
 
       - name: Terraform Destroy
@@ -35,5 +35,3 @@ jobs:
           else
             terraform destroy -auto-approve
           fi
-
-
