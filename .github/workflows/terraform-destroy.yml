@@ -23,9 +23,9 @@ jobs:
       - name: Terraform Init
         run: |
           if [ -d "terraform" ]; then
-            terraform -chdir=terraform init -upgrade
+            terraform -chdir=terraform init -upgrade -input=false
           else
-            terraform init -upgrade
+            terraform init -upgrade -input=false
           fi
 
       - name: Terraform Destroy
