@@ -44,4 +44,5 @@ jobs:
           else
             terraform destroy -auto-approve \
               -var="ARN_IAM_USER=${{ secrets.ARN_IAM_USER }}"
+              -lock=false
           fi
