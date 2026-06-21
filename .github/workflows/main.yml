@@ -39,9 +39,7 @@ jobs:
 
   Build:
     needs: [Scan-Application]
-    if: | 
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
-      needs.Scan-Application.result == 'success'
+    if: (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && needs.Scan-Application.result == 'success'
     uses: ./.github/workflows/build.yml
     with:
       AWS_REGION: us-east-1
@@ -50,10 +48,7 @@ jobs:
   #===================================CD===================================
   Provision-staging:
     needs: [Scan-Infrastructure, Scan-Application]
-    if: |
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' ) &&
-      needs.Scan-Infrastructure.result == 'success' &&
-      needs.Scan-Application.result == 'success'
+    if: (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && needs.Scan-Infrastructure.result == 'success' && needs.Scan-Application.result == 'success'
     uses: ./.github/workflows/provision.yml
     with:
       ENVIRONMENT: staging
@@ -61,13 +56,9 @@ jobs:
     secrets: inherit
 
   Provision-prod:
-    needs: [Scan-Infrastructure, Scan-Application] 
-    if: |
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
-      && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod') &&
-      needs.Scan-Infrastructure.result == 'success' &&
-      needs.Scan-Application.result == 'success'
-    uses: ./.github/workflows/provision.yml  
+    needs: [Scan-Infrastructure, Scan-Application] # Mở khóa lại needs để đảm bảo thứ tự chạy tuần tự CI -> CD chuẩn cấu trúc pipeline
+    if: (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && (github.base_ref == 'prod' || github.ref == 'refs/heads/prod') && needs.Scan-Infrastructure.result == 'success' && needs.Scan-Application.result == 'success'
+    uses: ./.github/workflows/provision.yml
     with:
       ENVIRONMENT: prod
       AWS_REGION: us-east-1
@@ -103,11 +94,7 @@ jobs:
 
   Deploy-prod:
     needs: [Provision-prod, Build, Dast-scan]
-    if: |
-      always() &&
-      needs.Provision-prod.result == 'success' &&
-      needs.Build.result == 'success' &&
-      needs.Dast-scan.result == 'success'
+    if: always() && needs.Provision-prod.result == 'success' && needs.Build.result == 'success' && needs.Dast-scan.result == 'success'
     uses: ./.github/workflows/deploy.yml
     with:
       ENVIRONMENT: prod
