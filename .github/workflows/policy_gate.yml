@@ -1,163 +1,166 @@
-  name: Infrastructure Deploy and Gatekeeper
+name: Infrastructure Deploy and Gatekeeper
 
-  on:
-    pull_request:
-      types:
-        - closed
-      paths-ignore:
-        - "VERSION"
-      branches:
-        - dev
-    push:
-      branches:
-        - prod
-        - dev
-        - staging
-      paths-ignore:
-        - "VERSION"
-        - "README.md"
-    workflow_dispatch:
+on:
+  pull_request:
+    types:
+      - closed
+    paths-ignore:
+      - "VERSION"
+    branches:
+      - dev
+  push:
+    branches:
+      - prod
+      - dev
+      - staging
+    paths-ignore:
+      - "VERSION"
+      - "README.md"
+  workflow_dispatch:
 
-    workflow_call:
-      inputs:
-        ENVIRONMENT:
-          required: true
-          type: string
-        AWS_REGION:
-          required: true
-          type: string
-        CLUSTER_NAME:
-          required: true
-          type: string
-        K8S_NAMESPACE:
-          required: true
-          type: string
+  workflow_call:
+    inputs:
+      ENVIRONMENT:
+        required: true
+        type: string
+      AWS_REGION:
+        required: true
+        type: string
+      CLUSTER_NAME:
+        required: true
+        type: string
+      K8S_NAMESPACE:
+        required: true
+        type: string
 
-  permissions:
-    contents: read
-    packages: write
-    id-token: write
-    security-events: write
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+  security-events: write
 
-  env:
-    AWS_REGION: ${{ inputs.AWS_REGION }}
-    ECR_REPOSITORY: nt524
-    POLICY_GATE: cosign-gatekeeper-provider 
-    ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
-    CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
+env:
+  AWS_REGION: ${{ inputs.AWS_REGION }}
+  ECR_REPOSITORY: nt524
+  POLICY_GATE: cosign-gatekeeper-provider 
+  ENVIRONMENT: ${{ inputs.ENVIRONMENT }}
+  CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
 
 
-  jobs:
-    Deploy-Gatekeeper:
-      name: Gatekeeper Policy Check and Deploy to EKS
-      runs-on: ubuntu-latest
+jobs:
+  Deploy-Gatekeeper:
+    name: Gatekeeper Policy Check and Deploy to EKS
+    runs-on: ubuntu-latest
 
-      steps:
-        - name: Checkout source code
-          uses: actions/checkout@v4
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-        - name: AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
-            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            aws-region: ${{ env.AWS_REGION }}
+      - name: AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-        - name: Login to Amazon ECR
-          id: login-ecr
-          uses: aws-actions/amazon-ecr-login@v2
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-        - name: Install AWS CLI v2
-          run: |
-            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            unzip awscliv2.zip
-            sudo ./aws/install --update
+      - name: Install AWS CLI v2
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install --update
 
-        - name: Install Kubectl
-          uses: azure/setup-kubectl@v4
-          with:
-            version: "latest"
+      - name: Install Kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
 
-        # CẤU HÌNH ĐƯỜNG TRUYỀN KUBECTL ĐẾN CỤM AWS EKS
-        - name: Update Kubeconfig cho AWS EKS
-          run: aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+      # CẤU HÌNH ĐƯỜNG TRUYỀN KUBECTL ĐẾN CỤM AWS EKS
+      - name: Update Kubeconfig cho AWS EKS
+        run: aws eks update-kubeconfig --name ${{ env.CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
 
-        # TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
-        - name: Install Gatekeeper with external data enabled
-          run: |
-            kubectl delete crd providers.externaldata.gatekeeper.sh --ignore-not-found=true
-            kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
-            kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
-            kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
-            kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
-            kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+      # TRIỂN KHAI TOÀN BỘ CHỐT KIỂM SOÁT OPA GATEKEEPER
+      - name: Install Gatekeeper with external data enabled
+        run: |
+          kubectl delete crd providers.externaldata.gatekeeper.sh --ignore-not-found=true
+          kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.10/deploy/gatekeeper.yaml
+          kubectl -n gatekeeper-system patch deployment gatekeeper-controller-manager --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system patch deployment gatekeeper-audit --type='json' -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--enable-external-data"}]'
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-controller-manager --timeout=180s
+          kubectl -n gatekeeper-system rollout status deployment/gatekeeper-audit --timeout=180s
+          
+          echo "⏳ Đợi 20 giây để Gatekeeper Webhook khởi động mạng hoàn tất..."
+          sleep 20
+          
+      - name: Sync Cosign public key and registry auth into cluster
+        env:
+          COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
+          GHCR_USERNAME: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
+        run: |
+          kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
+          
+          # 1. Tạo khóa Public Key cho Cosign
+          printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
+          kubectl -n cosign-system create secret generic cosign-public-key \
+            --from-file=cosign.pub=./cosign.pub \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # 2. 🛠️ THÊM DÒNG NÀY: Xóa cứng Secret cũ đang bị kẹt định dạng để tránh lỗi "field is immutable"
+          kubectl -n cosign-system delete secret ghcr-registry-auth --ignore-not-found=true
+
+          # 3. Tiến hành đúc Secret định dạng docker-registry mới tinh hoàn toàn hợp lệ
+          kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
+            --docker-server=ghcr.io \
+            --docker-username="$GHCR_USERNAME" \
+            --docker-password="$GHCR_PAT" \
+            --dry-run=client -o yaml | kubectl apply -f -
             
-            echo "⏳ Đợi 20 giây để Gatekeeper Webhook khởi động mạng hoàn tất..."
-            sleep 20
-            
-        - name: Sync Cosign public key and registry auth into cluster
-          env:
-            COSIGN_PUBLIC_KEY: ${{ secrets.COSIGN_PUBLIC_KEY }}
-            GHCR_USERNAME: ${{ github.actor }}
-            GHCR_PAT: ${{ secrets.GHCR_PAT }}
-          run: |
-            kubectl create namespace cosign-system --dry-run=client -o yaml | kubectl apply -f -
-            
-            # 1. Tạo khóa Public Key cho Cosign
-            printf '%s\n' "$COSIGN_PUBLIC_KEY" > cosign.pub
-            kubectl -n cosign-system create secret generic cosign-public-key \
-              --from-file=cosign.pub=./cosign.pub \
-              --dry-run=client -o yaml | kubectl apply -f -
-            
-            # 2. 🛠️ THÊM DÒNG NÀY: Xóa cứng Secret cũ đang bị kẹt định dạng để tránh lỗi "field is immutable"
-            kubectl -n cosign-system delete secret ghcr-registry-auth --ignore-not-found=true
+          rm -f cosign.pub
 
-            # 3. Tiến hành đúc Secret định dạng docker-registry mới tinh hoàn toàn hợp lệ
-            kubectl -n cosign-system create secret docker-registry ghcr-registry-auth \
-              --docker-server=ghcr.io \
-              --docker-username="$GHCR_USERNAME" \
-              --docker-password="$GHCR_PAT" \
-              --dry-run=client -o yaml | kubectl apply -f -
-              
-            rm -f cosign.pub
+      - name: Log in to GitHub Container Registry for Provider
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Log in to GitHub Container Registry for Provider
-          uses: docker/login-action@v3
-          with:
-            registry: ghcr.io
-            username: ${{ github.actor }}
-            password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and Push cosign verification provider image to GHCR
+        run: |
+          docker build -t ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest policy/cosign-provider
+          docker push ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
 
-        - name: Build and Push cosign verification provider image to GHCR
-          run: |
-            docker build -t ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest policy/cosign-provider
-            docker push ghcr.io/nt524/secure-ci-cd-pipeline/cosign-gatekeeper-provider:latest
-
-        - name: Apply Gatekeeper policy gate
-          run: |
-            echo "🧹 THÊM BƯỚC NÀY: Dọn sạch luật chặn cũ để giải phóng cụm, tránh lỗi tự chặn chính mình (Deadlock)"
+      - name: Apply Gatekeeper policy gate
+        run: |
+          echo "🧹 THÊM BƯỚC NÀY: Dọn sạch luật chặn cũ để giải phóng cụm, tránh lỗi tự chặn chính mình (Deadlock)"
+          # Kiểm tra xem CRD của luật chặn đã tồn tại trên cụm mới hay chưa trước khi chạy lệnh delete để tránh lỗi gãy pipeline
+          if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
             kubectl delete -f policy/gatekeeper/constraint.yaml --ignore-not-found=true
-            kubectl delete -f policy/gatekeeper/constraint-template.yaml --ignore-not-found=true
+          fi
+          kubectl delete -f policy/gatekeeper/constraint-template.yaml --ignore-not-found=true
 
-            echo "🚀 Tiến hành deploy Pod Provider mới..."
-            kubectl apply -f policy/gatekeeper/provider-deployment.yaml
-            kubectl apply -f policy/gatekeeper/provider.yaml
-            
-            echo "⏳ ĐỢI 45 GIÂY để Pod Provider mới chính thức lên đĩa và mở cổng 8090..."
-            sleep 45
+          echo "🚀 Tiến hành deploy Pod Provider mới..."
+          kubectl apply -f policy/gatekeeper/provider-deployment.yaml
+          kubectl apply -f policy/gatekeeper/provider.yaml
+          
+          echo "⏳ ĐỢI 45 GIÂY để Pod Provider mới chính thức lên đĩa và mở cổng 8090..."
+          sleep 45
 
-            echo "=== Kiểm tra trạng thái Pod Provider ==="
-            kubectl get pods -n cosign-system
+          echo "=== Kiểm tra trạng thái Pod Provider ==="
+          kubectl get pods -n cosign-system
 
-            echo "🔒 Tái áp dụng luật chặn bảo mật sau khi lính gác đã sống dậy chuẩn chỉ"
-            kubectl apply -f policy/gatekeeper/constraint-template.yaml
-            for i in $(seq 1 30); do
-              if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
-                break
-              fi
-              sleep 2
-            done
-            kubectl apply -f policy/gatekeeper/constraint.yaml
-            
-            echo "⏳ Đợi 15 giây để luật kiểm duyệt đồng bộ vào nhân Gatekeeper..."
-            sleep 15
+          echo "🔒 Tái áp dụng luật chặn bảo mật sau khi lính gác đã sống dậy chuẩn chỉ"
+          kubectl apply -f policy/gatekeeper/constraint-template.yaml
+          for i in $(seq 1 30); do
+            if kubectl get crd k8srequiredimagesignatures.constraints.gatekeeper.sh >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          kubectl apply -f policy/gatekeeper/constraint.yaml
+          
+          echo "⏳ Đợi 15 giây để luật kiểm duyệt đồng bộ vào nhân Gatekeeper..."
+          sleep 15
