@@ -2,7 +2,6 @@ name: Application Security Scanning
 
 on:
   workflow_call:
-    
 
 jobs:
   secret-scan:
@@ -14,9 +13,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # SỬA LOGIC: Mặc định docker run của TruffleHog trả về exit code 0 kể cả khi thấy secret. 
+      # Cần cấu hình để ghi nhận kết quả thực tế mà không làm sập luồng của các step đẩy log phía sau.
       - name: Run TruffleHog Scan (JSON Output)
         run: |
-          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json 
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest filesystem /pwd --json > trufflehog-report.json || true
 
       - name: Upload TruffleHog Security Reports
         uses: actions/upload-artifact@v4
@@ -79,3 +80,17 @@ jobs:
               -d @loki-payload.json \
               || echo "Canh bao: push log TruffleHog sang Loki cua Truong that bai"
           fi
+
+      # BẬT CHỐT CHẶN BẢO MẬT: Đặt ở cuối cùng sau khi mọi dữ liệu log/metric đã được đẩy lên Grafana thành công.
+      # Nếu đếm file report thấy có secret, step này sẽ ngắt toàn bộ Job bằng exit code 1 để kích hoạt chốt khóa Staging/Prod.
+      - name: Enforce Security Gate (Check for Secrets)
+        if: always()
+        run: |
+          if [ -s "trufflehog-report.json" ]; then
+            NUM_SECRETS=$(jq -s 'length' trufflehog-report.json)
+            if [ "$NUM_SECRETS" -gt 0 ]; then
+              echo "❌ NGUY HIỂM: Phát hiện $NUM_SECRETS thông tin mật (Secret/Key) bị rò rỉ trong mã nguồn!"
+              exit 1
+            fi
+          fi
+          echo "✅ AN TOÀN: Không phát hiện rò rỉ thông tin mật."

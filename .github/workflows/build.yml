@@ -212,3 +212,17 @@ jobs:
           echo "$COSIGN_PRIVATE_KEY" > cosign.key
           cosign sign --yes --key cosign.key ${{ env.IMAGE_NAME }}
           rm cosign.key
+
+      # BẬT CHỐT CHẶN BẢO MẬT CHO CONTAINER: Đặt ở cuối luồng, sau khi hoàn thành push, telemetry và sign.
+      # Nếu đếm tệp tin report có lỗ hổng thuộc nhóm CRITICAL hoặc HIGH, step này sẽ làm sập Job bằng exit code 1.
+      - name: Enforce Container Security Gate
+        if: always()
+        run: |
+          if [ -f "trivy-report.json" ]; then
+            NUM_VULNS=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-report.json || echo 0)
+            if [ "$NUM_VULNS" -gt 0 ] && [ "$NUM_VULNS" != "null" ]; then
+              echo "❌ NGUY HIỂM: Trivy phát hiện $NUM_VULNS lỗ hổng mức độ HIGH hoặc CRITICAL trong Docker Image!"
+              exit 1
+            fi
+          fi
+          echo "✅ AN TOÀN: Docker Image đạt tiêu chuẩn bảo mật."
